@@ -1,8 +1,11 @@
 """
-Agent Routes: Gap Analysis, Idea Generation, Planning, Code, Report
+Agent Routes: Gap Analysis, Idea Generation, Planning, Code, Report, Downloads, Streaming
 """
 
+import io
+import json as json_lib
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -122,7 +125,8 @@ async def create_plan(
     llm = build_llm_client_for_user(current_user)
 
     try:
-        plan = await run_planning(selected.get("idea", {}), intent, llm)
+        papers_list = papers_data.get("papers", [])
+        plan = await run_planning(selected.get("idea", {}), intent, llm, papers=papers_list)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Planning failed: {str(e)}")
 
@@ -148,8 +152,11 @@ async def generate_code(
 
     llm = build_llm_client_for_user(current_user)
 
+    file_hints = plan.get("file_structure", [])
+    papers_list = papers_data.get("papers", [])
+
     try:
-        code = await run_code_generation(selected.get("idea", {}), plan, llm)
+        code = await run_code_generation(selected.get("idea", {}), plan, llm, file_hints=file_hints, papers=papers_list)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Code generation failed: {str(e)}")
 
@@ -229,3 +236,64 @@ def _get_output(db: Session, project_id: str, output_type: str):
         Output.output_type == output_type
     ).first()
     return o.data if o else None
+
+
+# ── Download Endpoints ────────────────────────────────────────────────────────
+
+@router.get("/{project_id}/download/docx")
+async def download_docx(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Generate and download IEEE-format DOCX."""
+    _get_project(project_id, current_user.id, db)
+    report = _get_output(db, project_id, "report")
+    if not report:
+        raise HTTPException(status_code=400, detail="Generate the report first")
+
+    from services.export_service import generate_docx
+    docx_bytes = generate_docx(report)
+
+    return StreamingResponse(
+        io.BytesIO(docx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": "attachment; filename=research_paper.docx"},
+    )
+
+
+@router.get("/{project_id}/download/pdf")
+async def download_pdf(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Generate and download IEEE-format PDF."""
+    _get_project(project_id, current_user.id, db)
+    report = _get_output(db, project_id, "report")
+    if not report:
+        raise HTTPException(status_code=400, detail="Generate the report first")
+
+    from services.export_service import generate_pdf_html
+
+    html_content = generate_pdf_html(report)
+
+    # Try WeasyPrint first, fallback to HTML download
+    try:
+        from weasyprint import HTML
+        pdf_bytes = HTML(string=html_content).write_pdf()
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=research_paper.pdf"},
+        )
+    except ImportError:
+        # WeasyPrint not installed — return HTML as PDF-like download
+        html_bytes = html_content.encode("utf-8")
+        return StreamingResponse(
+            io.BytesIO(html_bytes),
+            media_type="text/html",
+            headers={"Content-Disposition": "attachment; filename=research_paper.html"},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")

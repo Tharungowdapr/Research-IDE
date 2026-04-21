@@ -30,3 +30,7 @@ Thumbs.db
 
 # Docker
 *.log
+
+# Models (large binary files)
+*.gguf
+*.bin

@@ -5,7 +5,7 @@ Generates complete, runnable research code with HuggingFace, wandb, PyYAML.
 
 import json
 import re
-from typing import Dict, List, Any
+from typing import Dict, List, Any, AsyncGenerator
 from core.llm_client import LLMClient
 
 CODE_SYSTEM = """You are a senior ML engineer. Generate complete, runnable Python code. \
@@ -92,8 +92,51 @@ async def run_code_generation(
             return result
         return _fallback_code(idea, plan)
     except Exception as e:
-        print(f"Code generation error: {e}")
+        import logging
+        logging.error(f"Code generation error: {e}")
         return _fallback_code(idea, plan)
+
+async def run_code_generation_stream(
+    idea: Dict,
+    plan: Dict,
+    llm: LLMClient,
+    file_hints: List[str] = None,
+    papers: List[Dict] = None,
+) -> AsyncGenerator[str, None]:
+    """Stream 12-file research code scaffold."""
+    tech = plan.get("tech_stack", {})
+    datasets = [d.get("name", "") for d in plan.get("datasets", [])]
+    metrics = plan.get("evaluation_metrics", [])
+    papers = papers or []
+
+    file_hints_section = ""
+    if file_hints:
+        file_hints_section = "Generate these specific files:\n" + "\n".join(f"- {h}" for h in file_hints)
+
+    github_hint = ""
+    if papers:
+        repo_refs = [p.get("github_url", "") for p in papers[:3] if p.get("github_url")]
+        if repo_refs:
+            github_hint = (f"Reference implementations exist at: {repo_refs}. "
+                          f"Include a comment in dataset.py: # Based on implementation from {repo_refs[0]}")
+
+    prompt = CODE_PROMPT.format(
+        title=idea.get("title", "Research Project"),
+        approach=idea.get("approach", "ML approach"),
+        tech_stack=f"Frameworks: {', '.join(tech.get('frameworks', ['PyTorch']))}",
+        datasets=", ".join(datasets) or "custom dataset",
+        metrics=", ".join(metrics) or "accuracy, F1",
+        file_hints_section=file_hints_section,
+        github_hint=github_hint,
+    )
+
+    try:
+        async for chunk in llm.stream_complete(prompt, system=CODE_SYSTEM, json_mode=True):
+            yield chunk
+    except Exception as e:
+        import logging
+        logging.error(f"Code streaming error: {e}")
+        yield json.dumps(_fallback_code(idea, plan))
 
 
 def _postprocess_makefile(result: Dict) -> Dict:

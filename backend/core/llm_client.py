@@ -9,8 +9,9 @@ Usage:
 
 import httpx
 import json
-from typing import Optional, AsyncGenerator
+from typing import Optional, List, Dict, AsyncGenerator
 from enum import Enum
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 
 class LLMProvider(str, Enum):
@@ -106,6 +107,7 @@ class LLMClient:
         if base_url and self.provider == LLMProvider.OLLAMA:
             self.base_urls[LLMProvider.OLLAMA] = base_url.rstrip("/")
 
+    @retry(wait=wait_exponential(min=1, max=10), stop=stop_after_attempt(3))
     async def complete(
         self,
         prompt: str,
@@ -126,6 +128,28 @@ class LLMClient:
         if not handler:
             raise ValueError(f"Unsupported provider: {self.provider}")
         return await handler(prompt, system, json_mode)
+
+    async def stream_complete(
+        self,
+        prompt: str,
+        system: Optional[str] = None,
+        json_mode: bool = False,
+    ) -> AsyncGenerator[str, None]:
+        """Stream a completion. Yields text chunks."""
+        dispatcher = {
+            LLMProvider.OPENAI: self._openai_stream,
+            LLMProvider.ANTHROPIC: self._anthropic_stream,
+            LLMProvider.GROQ: self._openai_stream,
+            LLMProvider.GEMINI: self._gemini_stream,
+            LLMProvider.COHERE: self._cohere_stream,
+            LLMProvider.OLLAMA: self._ollama_stream,
+            LLMProvider.OPENROUTER: self._openai_stream,
+        }
+        handler = dispatcher.get(self.provider)
+        if not handler:
+            raise ValueError(f"Unsupported provider for streaming: {self.provider}")
+        async for chunk in handler(prompt, system, json_mode):
+            yield chunk
 
     # ── OpenAI / Groq / OpenRouter ────────────────────────────────────────────
 
@@ -165,6 +189,42 @@ class LLMClient:
             data = resp.json()
             return data["choices"][0]["message"]["content"]
 
+    async def _openai_stream(self, prompt: str, system: Optional[str], json_mode: bool) -> AsyncGenerator[str, None]:
+        messages = [{"role": "system", "content": system}] if system else []
+        messages.append({"role": "user", "content": prompt})
+
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "stream": True,
+        }
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        if self.provider == LLMProvider.OPENROUTER:
+            headers["HTTP-Referer"] = "http://localhost:3000"
+            headers["X-Title"] = "ResearchIDE"
+
+        base = self.base_urls[self.provider]
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream("POST", f"{base}/chat/completions", headers=headers, json=payload) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if line.startswith("data: "):
+                        line = line[6:]
+                        if line == "[DONE]":
+                            break
+                        try:
+                            import json
+                            data = json.loads(line)
+                            if data["choices"][0]["delta"].get("content"):
+                                yield data["choices"][0]["delta"]["content"]
+                        except:
+                            pass
+
     # ── Anthropic ─────────────────────────────────────────────────────────────
 
     async def _anthropic_complete(
@@ -198,7 +258,36 @@ class LLMClient:
             data = resp.json()
             return data["content"][0]["text"]
 
-    # ── Google Gemini ─────────────────────────────────────────────────────────
+    async def _anthropic_stream(self, prompt: str, system: Optional[str], json_mode: bool) -> AsyncGenerator[str, None]:
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+            "stream": True,
+        }
+        if system:
+            payload["system"] = system
+
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        }
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream("POST", f"{self.base_urls[LLMProvider.ANTHROPIC]}/messages", headers=headers, json=payload) as resp:
+                resp.raise_for_status()
+                import json
+                async for line in resp.aiter_lines():
+                    if line.startswith("data: "):
+                        try:
+                            data = json.loads(line[6:])
+                            if data.get("type") == "content_block_delta" and "text" in data.get("delta", {}):
+                                yield data["delta"]["text"]
+                        except:
+                            pass
+
+    # ── Gemini ─────────────────────────────────────────────────────────
 
     async def _gemini_complete(
         self, prompt: str, system: Optional[str], json_mode: bool
@@ -223,6 +312,35 @@ class LLMClient:
             resp.raise_for_status()
             data = resp.json()
             return data["candidates"][0]["content"]["parts"][0]["text"]
+
+    async def _gemini_stream(self, prompt: str, system: Optional[str], json_mode: bool) -> AsyncGenerator[str, None]:
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": self.temperature,
+                "maxOutputTokens": self.max_tokens,
+            },
+        }
+        if system:
+            payload["systemInstruction"] = {"parts": [{"text": system}]}
+        if json_mode:
+            payload["generationConfig"]["responseMimeType"] = "application/json"
+
+        url = f"{self.base_urls[LLMProvider.GEMINI]}/models/{self.model}:streamGenerateContent?alt=sse&key={self.api_key}"
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream("POST", url, json=payload) as resp:
+                resp.raise_for_status()
+                import json
+                async for line in resp.aiter_lines():
+                    if line.startswith("data: "):
+                        try:
+                            data = json.loads(line[6:])
+                            if "candidates" in data and len(data["candidates"]) > 0:
+                                parts = data["candidates"][0].get("content", {}).get("parts", [])
+                                if parts and "text" in parts[0]:
+                                    yield parts[0]["text"]
+                        except:
+                            pass
 
     # ── Cohere ────────────────────────────────────────────────────────────────
 
@@ -250,7 +368,34 @@ class LLMClient:
             data = resp.json()
             return data["text"]
 
-    # ── Ollama (Local) ────────────────────────────────────────────────────────
+    async def _cohere_stream(self, prompt: str, system: Optional[str], json_mode: bool) -> AsyncGenerator[str, None]:
+        payload = {
+            "model": self.model,
+            "message": prompt,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "stream": True,
+        }
+        if system:
+            payload["preamble"] = system
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream("POST", f"{self.base_urls[LLMProvider.COHERE]}/chat", headers=headers, json=payload) as resp:
+                resp.raise_for_status()
+                import json
+                async for line in resp.aiter_lines():
+                    if line:
+                        try:
+                            data = json.loads(line)
+                            if data.get("event_type") == "text-generation":
+                                yield data["text"]
+                        except:
+                            pass
+
+    # ── Ollama ────────────────────────────────────────────────────────────────
 
     async def _ollama_complete(
         self, prompt: str, system: Optional[str], json_mode: bool
@@ -279,7 +424,32 @@ class LLMClient:
             data = resp.json()
             return data["message"]["content"]
 
-    # ── Utility ───────────────────────────────────────────────────────────────
+    async def _ollama_stream(self, prompt: str, system: Optional[str], json_mode: bool) -> AsyncGenerator[str, None]:
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": True,
+            "options": {"temperature": self.temperature, "num_predict": self.max_tokens},
+        }
+        if system:
+            payload["messages"].insert(0, {"role": "system", "content": system})
+        if json_mode:
+            payload["format"] = "json"
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream("POST", f"{self.base_urls[LLMProvider.OLLAMA]}/api/chat", json=payload) as resp:
+                resp.raise_for_status()
+                import json
+                async for line in resp.aiter_lines():
+                    if line:
+                        try:
+                            data = json.loads(line)
+                            if "message" in data and "content" in data["message"]:
+                                yield data["message"]["content"]
+                        except:
+                            pass
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
 
     async def test_connection(self) -> dict:
         """Test if the LLM provider is reachable and the key is valid."""

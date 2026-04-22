@@ -5,7 +5,7 @@ Pass 1: Base plan | Pass 2: Experiment configs + file structure
 
 import json
 import re
-from typing import Dict, List, Any
+from typing import Dict, List, Any, AsyncGenerator
 from core.llm_client import LLMClient
 
 PLAN_SYSTEM = "You are a senior ML researcher and system architect. Return ONLY valid JSON."
@@ -142,6 +142,96 @@ async def run_planning(idea: Dict, intent: Dict, llm: LLMClient, papers: List[Di
         plan.setdefault("baseline_implementations", [])
 
     return plan
+
+async def run_planning_stream(idea: Dict, intent: Dict, llm: LLMClient, papers: List[Dict] = None) -> AsyncGenerator[str, None]:
+    """Stream 2-pass planning."""
+    domain = ", ".join(intent.get("domain", ["AI/ML"]))
+    
+    # We will do Pass 1 synchronously or use fallback, then stream Pass 2
+    # But since the user wants to see the execution plan live, maybe we stream the whole 
+    # Pass 2 configuration since that's the final output that matters, or just stream Pass 1?
+    # Let's just stream Pass 1 for simplicity of the UI, or we can stream the combined final JSON.
+    # Actually, pass 2 is what adds experiment configs.
+    # To keep it simple and truly "live", let's just stream Pass 1 as the main plan, 
+    # and then append the pass 2 stuff when done.
+    # Wait, the prompt for Pass 2 takes the output of Pass 1. 
+    # For a streaming UX, we can just do a single pass streaming prompt that combines both!
+    
+    COMBINED_PROMPT = """Create a detailed execution plan and experiment configurations.
+Idea: {title}
+Approach: {approach}
+Domain Context: {domain}
+Related Papers: {paper_titles}
+
+Return ONE JSON object EXACTLY matching this structure:
+{{
+  "overview": "2-3 sentence project overview",
+  "architecture": {{
+    "components": ["component 1", "component 2"],
+    "diagram_description": "Text description of the system architecture"
+  }},
+  "phases": [
+    {{
+      "phase": 1,
+      "name": "Phase name",
+      "duration": "X weeks",
+      "tasks": ["task 1", "task 2"],
+      "deliverables": ["deliverable 1"]
+    }}
+  ],
+  "tech_stack": {{
+    "languages": ["Python"],
+    "frameworks": ["PyTorch", "HuggingFace"],
+    "tools": ["wandb", "docker"],
+    "infrastructure": ["local GPU or Colab"]
+  }},
+  "datasets": [
+    {{
+      "name": "Dataset name",
+      "source": "URL or description",
+      "why": "Why this dataset"
+    }}
+  ],
+  "evaluation_metrics": ["metric 1", "metric 2"],
+  "baseline_comparison": "What to compare against",
+  "risks": ["risk 1", "risk 2"],
+  "total_estimate": "X-Y months",
+  "experiment_configs": [
+    {{
+      "name": "Experiment name",
+      "hyperparameters": {{"learning_rate": 0.001, "batch_size": 32, "epochs": 100}},
+      "dataset": "Dataset to use",
+      "expected_runtime": "2-4 hours on single GPU"
+    }}
+  ],
+  "file_structure": [
+    "src/model.py",
+    "src/train.py"
+  ],
+  "makefile_targets": [
+    {{"target": "train", "command": "python main.py", "description": "Train model"}}
+  ],
+  "baseline_implementations": [
+    {{"method_name": "Baseline method", "paper_reference": "Paper title", "why_baseline": "SOTA"}}
+  ]
+}}
+"""
+    paper_titles = ", ".join(p.get("title", "")[:60] for p in (papers or [])[:5])
+    
+    prompt = COMBINED_PROMPT.format(
+        title=idea.get("title", "Research Idea"),
+        approach=idea.get("approach", ""),
+        domain=domain,
+        paper_titles=paper_titles or "various recent works"
+    )
+    
+    try:
+        async for chunk in llm.stream_complete(prompt, system=PLAN_SYSTEM, json_mode=True):
+            yield chunk
+    except Exception as e:
+        import logging
+        logging.error(f"Planning streaming error: {e}")
+        yield json.dumps(_fallback_plan(idea))
 
 
 def _fallback_plan(idea: Dict) -> Dict:

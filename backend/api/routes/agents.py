@@ -17,8 +17,8 @@ from models.user import User
 from models.project import Project, Output
 from agents.gap_miner.gap_agent import run_gap_analysis
 from agents.idea_generator.idea_agent import run_idea_generation
-from agents.planner.planner_agent import run_planning
-from agents.code_agent.code_agent import run_code_generation
+from agents.planner.planner_agent import run_planning, run_planning_stream
+from agents.code_agent.code_agent import run_code_generation, run_code_generation_stream
 from agents.writer.writer_agent import run_report_generation
 
 router = APIRouter()
@@ -136,6 +136,53 @@ async def create_plan(
 
     return {"project_id": project.id, "plan": plan}
 
+@router.post("/plan/stream")
+async def create_plan_stream(
+    body: AgentRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Generate execution plan using SSE."""
+    project, papers_data, intent = _load_project_context(body.project_id, current_user.id, db)
+    selected = _get_output(db, project.id, "selected_idea")
+    if not selected:
+        raise HTTPException(status_code=400, detail="Select an idea first")
+
+    llm = build_llm_client_for_user(current_user)
+    papers_list = papers_data.get("papers", [])
+
+    async def event_generator():
+        try:
+            full_content = ""
+            async for chunk in run_planning_stream(selected.get("idea", {}), intent, llm, papers=papers_list):
+                full_content += chunk
+                # We yield the chunk as JSON. The frontend will reconstruct the string.
+                yield f"data: {json_lib.dumps({'chunk': chunk})}\n\n"
+            
+            # When done, try to parse the full content to save to DB
+            try:
+                import json
+                import re
+                
+                # Simple regex to find the first '{' and last '}'
+                content_to_parse = full_content.strip()
+                match = re.search(r'\{.*\}', content_to_parse, re.DOTALL)
+                if match:
+                    content_to_parse = match.group(0)
+                    
+                parsed_plan = json.loads(content_to_parse)
+                _save_output(db, project.id, "plan", parsed_plan)
+                project.current_stage = "code"
+                db.commit()
+            except Exception as e:
+                import logging
+                logging.error(f"Failed to parse streamed plan: {e}")
+                
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            yield f"data: {json_lib.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @router.post("/generate-code")
 async def generate_code(
@@ -165,6 +212,53 @@ async def generate_code(
     db.commit()
 
     return {"project_id": project.id, "code": code}
+
+@router.post("/generate-code/stream")
+async def generate_code_stream(
+    body: AgentRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Generate starter code using SSE."""
+    project, papers_data, intent = _load_project_context(body.project_id, current_user.id, db)
+    selected = _get_output(db, project.id, "selected_idea")
+    plan = _get_output(db, project.id, "plan")
+    if not selected or not plan:
+        raise HTTPException(status_code=400, detail="Complete planning step first")
+
+    llm = build_llm_client_for_user(current_user)
+    file_hints = plan.get("file_structure", [])
+    papers_list = papers_data.get("papers", [])
+
+    async def event_generator():
+        try:
+            full_content = ""
+            async for chunk in run_code_generation_stream(selected.get("idea", {}), plan, llm, file_hints=file_hints, papers=papers_list):
+                full_content += chunk
+                yield f"data: {json_lib.dumps({'chunk': chunk})}\n\n"
+                
+            # When done, try to parse
+            try:
+                import json
+                
+                content_to_parse = full_content.strip()
+                match = re.search(r'\{.*\}', content_to_parse, re.DOTALL)
+                if match:
+                    content_to_parse = match.group(0)
+                    
+                parsed_code = json.loads(content_to_parse)
+                _save_output(db, project.id, "code", parsed_code)
+                project.current_stage = "report"
+                db.commit()
+            except Exception as e:
+                import logging
+                logging.error(f"Failed to parse streamed code: {e}")
+
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            yield f"data: {json_lib.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.post("/generate-report")

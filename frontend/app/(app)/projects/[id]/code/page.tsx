@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Code2, Download, Copy, Check, Loader2, ArrowRight, FileText } from 'lucide-react';
 import { projectsAPI, agentsAPI } from '@/services/api';
+import { parse } from 'partial-json';
 
 export default function CodePage() {
   const { id } = useParams<{ id: string }>();
@@ -11,16 +12,53 @@ export default function CodePage() {
   const [codeData, setCodeData] = useState<any>(null);
   const [activeFile, setActiveFile] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [streaming, setStreaming] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const streamContent = useRef('');
+  
   useEffect(() => {
     projectsAPI.get(id).then((p) => {
-      if (p.outputs?.code) setCodeData(p.outputs.code);
-      else {
-        agentsAPI.generateCode(id).then((r) => setCodeData(r.code)).catch(console.error);
+      if (p.outputs?.code) {
+        setCodeData(p.outputs.code);
+        setLoading(false);
+      } else {
+        setStreaming(true);
+        agentsAPI.generateCodeStream(
+          id,
+          (chunk) => {
+            streamContent.current += chunk;
+            try {
+              // Attempt to strip markdown code blocks from stream if they exist
+              let contentToParse = streamContent.current.trim();
+              if (contentToParse.startsWith("```json")) contentToParse = contentToParse.substring(7);
+              else if (contentToParse.startsWith("```")) contentToParse = contentToParse.substring(3);
+              
+              const partial = parse(contentToParse);
+              if (partial && typeof partial === 'object' && Object.keys(partial).length > 0) {
+                setCodeData(partial);
+                setLoading(false);
+              }
+            } catch (e) {
+              // Ignore partial parse errors while streaming
+            }
+          },
+          () => {
+            // Done streaming
+            setStreaming(false);
+            setLoading(false);
+            projectsAPI.get(id).then(updated => {
+                if (updated.outputs?.code) setCodeData(updated.outputs.code);
+            });
+          },
+          (err) => {
+            console.error('Code generation failed', err);
+            setLoading(false);
+            setStreaming(false);
+          }
+        );
       }
-      setLoading(false);
     });
   }, [id]);
 
@@ -59,6 +97,15 @@ export default function CodePage() {
     }
   };
 
+  const safeStr = (val: any): string => {
+    if (val === null || val === undefined) return '';
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object') {
+      try { return JSON.stringify(val); } catch { return ''; }
+    }
+    return String(val);
+  };
+
   if (loading || !codeData) {
     return (
       <div className="p-8 flex flex-col items-center justify-center min-h-[400px] gap-3">
@@ -79,12 +126,12 @@ export default function CodePage() {
           <p className="text-xs text-[var(--text-muted)] mt-0.5">Step 6 of 7 — Starter code for your project</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={handleDownload} className="btn-secondary">
+          <button onClick={handleDownload} disabled={streaming} className="btn-secondary">
             <Download size={14} /> Download All
           </button>
-          <button onClick={handleGenerateReport} disabled={generating} className="btn-primary">
-            {generating ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
-            {generating ? 'Generating...' : 'Write Paper'}
+          <button onClick={handleGenerateReport} disabled={generating || streaming} className="btn-primary">
+            {generating || streaming ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+            {streaming ? 'Generating Code...' : generating ? 'Generating...' : 'Write Paper'}
           </button>
         </div>
       </div>
@@ -103,8 +150,8 @@ export default function CodePage() {
                   : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
               }`}
             >
-              <p className="font-mono font-medium">{file.filename}</p>
-              <p className="text-[var(--text-muted)] mt-0.5 truncate">{file.description}</p>
+              <p className="font-mono font-medium">{safeStr(file.filename)}</p>
+              <p className="text-[var(--text-muted)] mt-0.5 truncate">{safeStr(file.description)}</p>
             </button>
           ))}
 
@@ -113,14 +160,14 @@ export default function CodePage() {
             <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] p-3">
               <p className="text-xs font-medium text-[var(--text-secondary)] mb-2">Setup</p>
               <ol className="space-y-1">
-                {codeData.setup_instructions.map((step: string, i: number) => (
-                  <li key={i} className="text-xs text-[var(--text-muted)]">{i + 1}. {step}</li>
+                {codeData.setup_instructions.map((step: any, i: number) => (
+                  <li key={i} className="text-xs text-[var(--text-muted)]">{i + 1}. {safeStr(step)}</li>
                 ))}
               </ol>
               {codeData.run_command && (
                 <div className="mt-2 rounded bg-[var(--bg-primary)] px-2 py-1.5">
                   <p className="text-[10px] text-[var(--text-muted)] mb-0.5">Run:</p>
-                  <code className="text-xs text-emerald-400 font-mono">{codeData.run_command}</code>
+                  <code className="text-xs text-emerald-400 font-mono">{safeStr(codeData.run_command)}</code>
                 </div>
               )}
             </div>
@@ -133,7 +180,7 @@ export default function CodePage() {
             {/* Code Header */}
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border)] bg-[var(--bg-card)]">
               <span className="text-xs font-mono text-[var(--text-secondary)]">
-                {activeFileData?.filename}
+                {safeStr(activeFileData?.filename)}
               </span>
               <button onClick={handleCopy} className="btn-ghost text-xs py-1 px-2">
                 {copied ? <><Check size={12} className="text-emerald-400" /> Copied</> : <><Copy size={12} /> Copy</>}
@@ -141,7 +188,7 @@ export default function CodePage() {
             </div>
             {/* Code Content */}
             <pre className="p-4 overflow-auto max-h-[600px] text-xs font-mono text-[var(--text-secondary)] leading-relaxed">
-              <code>{activeFileData?.code || ''}</code>
+              <code>{safeStr(activeFileData?.code || '')}</code>
             </pre>
           </div>
         </div>

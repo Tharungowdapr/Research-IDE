@@ -24,14 +24,14 @@ Return a JSON array of claims:
   {{"paper_title": "...", "claim": "...", "type": "contribution|limitation|future_work|assumption"}}
 ]
 
-Extract up to 40 claims total. Each claim should be one specific sentence."""
+Extract up to 60 claims total. Each claim should be one specific sentence."""
 
 
 # ── Pass 2: Gap Identification ────────────────────────────────────────────────
 
 GAP_SYSTEM = "You are an expert research gap analyst. Return ONLY valid JSON."
 
-GAP_PROMPT = """Given these research claims from the literature, identify 5-7 specific research gaps.
+GAP_PROMPT = """Given these research claims from the literature, identify 10-15 specific research gaps.
 
 Claims:
 {claims_text}
@@ -39,7 +39,7 @@ Claims:
 Domain: {domain}
 Problem: {problem}
 
-Return EXACTLY a JSON array with between 5 and 7 objects, no more, no less:
+Return EXACTLY a JSON array with between 10 and 15 objects, no more, no less:
 [
   {{
     "title": "Short gap title",
@@ -104,7 +104,7 @@ async def run_gap_analysis(
         gaps = await _pass2_identify_gaps(claims, domain, problem, llm)
         if not gaps:
             return _extracted_gaps_from_papers(papers)
-        gaps = gaps[:7]
+        gaps = gaps[:15]
 
         # Pass 3: Score gaps (skip for Ollama)
         skip_pass3 = llm.provider.value == "ollama"
@@ -141,7 +141,7 @@ async def _pass1_extract_claims(papers_summary: str, llm: LLMClient) -> List[Dic
 
 
 async def _pass2_identify_gaps(claims: List[Dict], domain: str, problem: str, llm: LLMClient) -> List[Dict]:
-    claims_text = json.dumps(claims[:40], indent=1)
+    claims_text = json.dumps(claims[:60], indent=1)
     prompt = GAP_PROMPT.format(claims_text=claims_text, domain=domain, problem=problem)
     raw = await llm.complete(prompt, system=GAP_SYSTEM, json_mode=True)
     return _parse_json_list(raw)

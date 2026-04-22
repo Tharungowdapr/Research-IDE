@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import { fetchEventSource } from '@microsoft/fetch-event-source';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -111,8 +112,76 @@ export const agentsAPI = {
   createPlan: (projectId: string) =>
     api.post('/agents/plan', { project_id: projectId }).then((r) => r.data),
 
+  createPlanStream: (projectId: string, onMessage: (chunk: string) => void, onDone: () => void, onError: (e: any) => void) => {
+    let token = '';
+    try {
+      const stored = localStorage.getItem('research-ide-auth');
+      if (stored) token = JSON.parse(stored)?.state?.accessToken || '';
+    } catch {}
+    
+    fetchEventSource(`${API_URL}/api/agents/plan/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ project_id: projectId }),
+      onmessage(ev) {
+        if (ev.data === '[DONE]') {
+          onDone();
+        } else {
+          try {
+            const parsed = JSON.parse(ev.data);
+            if (parsed.error) onError(new Error(parsed.error));
+            else if (parsed.chunk) onMessage(parsed.chunk);
+          } catch (e) {
+            console.error('Failed to parse SSE message:', e);
+          }
+        }
+      },
+      onerror(err) {
+        onError(err);
+        throw err; // Stop retrying
+      }
+    });
+  },
+
   generateCode: (projectId: string) =>
     api.post('/agents/generate-code', { project_id: projectId }).then((r) => r.data),
+
+  generateCodeStream: (projectId: string, onMessage: (chunk: string) => void, onDone: () => void, onError: (e: any) => void) => {
+    let token = '';
+    try {
+      const stored = localStorage.getItem('research-ide-auth');
+      if (stored) token = JSON.parse(stored)?.state?.accessToken || '';
+    } catch {}
+
+    fetchEventSource(`${API_URL}/api/agents/generate-code/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ project_id: projectId }),
+      onmessage(ev) {
+        if (ev.data === '[DONE]') {
+          onDone();
+        } else {
+          try {
+            const parsed = JSON.parse(ev.data);
+            if (parsed.error) onError(new Error(parsed.error));
+            else if (parsed.chunk) onMessage(parsed.chunk);
+          } catch (e) {
+            console.error('Failed to parse SSE message:', e);
+          }
+        }
+      },
+      onerror(err) {
+        onError(err);
+        throw err; // Stop retrying
+      }
+    });
+  },
 
   generateReport: (projectId: string) =>
     api.post('/agents/generate-report', { project_id: projectId }).then((r) => r.data),

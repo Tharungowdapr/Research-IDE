@@ -13,7 +13,7 @@ from core.llm_client import LLMClient
 
 GEN_SYSTEM = "You are a creative research idea generator. Generate specific, actionable, novel ideas. Return ONLY valid JSON."
 
-GEN_PROMPT = """Generate 6 innovative research ideas based on these gaps.
+GEN_PROMPT = """Generate 15 innovative research ideas based on these gaps.
 
 Research Domain: {domain}
 Problem: {problem}
@@ -25,7 +25,7 @@ Identified Research Gaps:
 Key Papers Context:
 {papers_summary}
 
-Generate 6 ideas as a JSON array. Each idea must include:
+Generate 15 ideas as a JSON array. Each idea must include:
 [
   {{
     "title": "Concise idea title",
@@ -105,7 +105,7 @@ async def run_idea_generation(
     papers_summary = _summarize_papers_brief(papers[:8])
 
     try:
-        # Round 1: Generate 6 ideas
+        # Round 1: Generate 10 ideas
         ideas = await _round1_generate(domain, problem, constraints, gaps_summary, papers_summary, llm)
         if not ideas:
             return _fallback_ideas(gaps, intent)
@@ -119,7 +119,7 @@ async def run_idea_generation(
             for idea in ideas:
                 idea["survived_critique"] = False
                 idea["critique_summary"] = "Critique unavailable"
-            return _rank_ideas(ideas)[:4]
+            return _rank_ideas(ideas)[:8]
 
         # Apply critique filter
         critique_map = {c.get("idea_title", "").lower(): c for c in critiques}
@@ -133,15 +133,22 @@ async def run_idea_generation(
             idea["_weakness_score"] = ws
             idea["_critique"] = crit
 
-            if ws < 7 and salvageable:
+            if ws < 8 and salvageable:
                 survivors.append(idea)
             else:
                 rejected.append(idea)
 
-        # Minimum survivors rule
-        if len(survivors) < 2:
+        # Ensure we return at least 8 ideas if possible
+        if len(survivors) < 8:
+            # Add back some rejected ideas with lowest weakness scores
             rejected.sort(key=lambda x: x.get("_weakness_score", 10))
-            while len(survivors) < 2 and rejected:
+            needed = 8 - len(survivors)
+            survivors.extend(rejected[:needed])
+
+        # Minimum survivors rule
+        if len(survivors) < 4:
+            rejected.sort(key=lambda x: x.get("_weakness_score", 10))
+            while len(survivors) < 4 and rejected:
                 forced = rejected.pop(0)
                 forced["_forced"] = True
                 survivors.append(forced)
@@ -164,7 +171,7 @@ async def run_idea_generation(
             idea.setdefault("assumptions", [])
             idea.setdefault("failure_modes", [])
 
-        return _rank_ideas(survivors)[:4]
+        return _rank_ideas(survivors)[:8]
 
     except Exception as e:
         print(f"Idea generation error: {e}")

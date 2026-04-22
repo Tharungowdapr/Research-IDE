@@ -106,7 +106,7 @@ export default function ProjectInputPage() {
           {!intent ? (
             <div className="flex flex-col items-center justify-center min-h-[200px] text-center">
               <Brain size={32} className="text-[var(--text-muted)] mb-3" />
-              <p className="text-sm text-[var(--text-secondary)]">Click "Analyze with AI" to extract</p>
+              <p className="text-sm text-[var(--text-secondary)]">Click &quot;Analyze with AI&quot; to extract</p>
               <p className="text-xs text-[var(--text-muted)] mt-1">Domain, keywords, constraints, and search queries</p>
             </div>
           ) : (

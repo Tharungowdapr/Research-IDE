@@ -23,13 +23,17 @@ export default function DashboardPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     projectsAPI.list()
       .then(setProjects)
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  if (!mounted) return null;
 
   return (
     <div className="p-8 max-w-5xl mx-auto">

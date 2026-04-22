@@ -14,6 +14,8 @@
 - [x] **Critic-Defender Idea Generation** — Adversarial loop: Generate → Critique → Defend & Refine
 - [x] **2-Pass Execution Planning** — Base plan + experiment configs, file structure, baselines
 - [x] **12-File Code Scaffold** — Complete runnable project with wandb, PyYAML, pytest, Makefile
+- [x] **SSE Real-time Streaming** — Live token streaming for Plan and Code generation
+- [x] **High-Capacity Research** — Scaled to 15+ gaps and 10+ ideas per project
 - [x] **IEEE Paper Generation** — Full research paper with proper citations and references
 - [x] **DOCX & PDF Export** — Download IEEE-format papers as Word or PDF documents
 - [x] **7 LLM Providers** — OpenAI, Anthropic, Groq, Gemini, Cohere, Ollama (free), OpenRouter
@@ -100,8 +102,8 @@ start.bat
 └──────────────────────────────────────────────────────┘
          │                          │
     ┌────┴────┐          ┌──────────┴──────────┐
-    │ arXiv   │          │ Semantic Scholar     │
-    │ OpenAlex│          │ PapersWithCode       │
+    │ arXiv   │          │ SSE Streaming       │
+    │ OpenAlex│          │ (Real-time Live UI) │
     └─────────┘          └─────────────────────┘
 ```
 

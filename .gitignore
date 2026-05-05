@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+env/
+.env
+*.db
+*.sqlite3
+
+# Node
+node_modules/
+.next/
+.cache/
+dist/
+build/
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Ollama model files
+*.gguf
+*.bin
+
+# Generated outputs
+research_ide.db
+outputs/
+checkpoints/

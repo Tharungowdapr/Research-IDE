@@ -1,85 +1,73 @@
 # Contributing to ResearchIDE
 
-Thank you for your interest in contributing! This guide covers everything you need.
+Thank you for your interest in contributing! Here's how to get started.
 
-## Quick Start
+## Development Setup
 
 ```bash
-git clone https://github.com/your-username/research-ide
-cd research-ide
+# Fork and clone
+git clone https://github.com/YOUR_USERNAME/Research-IDE.git
+cd Research-IDE
+
+# Setup
 make setup
+
+# Run dev servers
 make dev
 ```
 
-## Branch Naming
+## Workflow
 
-Use Conventional Commits prefixes:
-- `feature/your-feature-name` — new feature
-- `fix/issue-description` — bug fix
-- `docs/what-you-changed` — documentation only
-- `refactor/what-you-changed` — code refactor, no behavior change
-- `test/what-you-tested` — tests only
+1. **Fork** the repository
+2. **Create a branch**: `git checkout -b feature/your-feature`
+3. **Make changes** and test locally
+4. **Commit** with clear messages (see below)
+5. **Push** to your fork: `git push origin feature/your-feature`
+6. **Open a Pull Request** against `main`
 
 ## Commit Message Format
 
-Follow [Conventional Commits](https://www.conventionalcommits.org/):
-
 ```
-feat: add Cohere provider support
-fix: prevent crash when Ollama is offline
-docs: update setup instructions for Windows
-refactor: extract parse_llm_json to core/utils.py
-test: add gap agent fallback tests
+type(scope): description
+
+feat(agents): add 3-pass gap analysis pipeline
+fix(retrieval): handle OpenAlex null abstracts
+docs(readme): update setup instructions
+test(agents): add fallback function tests
 ```
 
-## Pull Request Workflow
-
-1. Fork the repository
-2. Create your branch: `git checkout -b feature/my-feature`
-3. Make your changes
-4. Run tests: `make test`
-5. Commit: `git commit -m "feat: describe your change"`
-6. Push: `git push origin feature/my-feature`
-7. Open a Pull Request against `main`
-
-## Running Tests Locally
-
-```bash
-cd backend
-source venv/bin/activate
-python -m pytest tests/ -v
-```
+Types: `feat`, `fix`, `docs`, `test`, `refactor`, `style`, `chore`
 
 ## Code Style
 
-- **Python**: Black formatter (`black .`), Ruff linter (`ruff check .`)
-- **TypeScript**: ESLint (`npm run lint` in frontend/)
-- Line length: 100 characters
-- All new backend functions need a `_fallback_*` equivalent
+### Backend (Python)
+- Formatter: `black` (line-length: 100)
+- Linter: `ruff`
+- Type hints encouraged
+- All agent functions must have a `_fallback_*()` equivalent
 
-## Adding a New LLM Provider
+### Frontend (TypeScript)
+- Use existing CSS variable system (`var(--bg-card)`, `var(--border)`, etc.)
+- Use existing utility classes (`btn-primary`, `card`, `badge-blue`, etc.)
+- Components must be responsive
 
-1. Add to `LLMProvider` enum in `backend/core/llm_client.py`
-2. Add default model to `PROVIDER_DEFAULTS`
-3. Add models list to `PROVIDER_MODELS`
-4. Implement `_yourprovider_complete()` async method
-5. Add to dispatcher in `complete()`
-6. Add provider card to `backend/api/routes/llm_config.py`
-7. Add tests
+## Testing
 
-## Adding a New Agent
+```bash
+# Backend tests
+cd backend && source venv/bin/activate && python -m pytest tests/ -v
 
-1. Create `backend/agents/your_agent/your_agent.py`
-2. Add `__init__.py`
-3. Export a `run_your_agent(...)` async function
-4. Add `_fallback_*` function that returns valid data
-5. Wire up in `backend/api/routes/agents.py`
-6. Add frontend page if needed
+# Frontend build check
+cd frontend && npm run build
+```
 
-## Reporting Issues
+## Architecture Rules
 
-Include:
-- OS and Python/Node version
-- LLM provider being used
-- Full error message and stack trace
-- Steps to reproduce
+- **Do not change**: database schema, auth system, LLM client, settings pages
+- All agent outputs saved to `outputs` table with `output_type` string key
+- All new endpoints require auth: `current_user: User = Depends(get_current_user)`
+- All HTTP calls use `httpx.AsyncClient` with timeouts
+
+## Questions?
+
+Open an issue or start a discussion. We're happy to help!

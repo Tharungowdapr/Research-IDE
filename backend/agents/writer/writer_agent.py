@@ -1,206 +1,304 @@
-"""Writer Agent v2 — IEEE-format research paper generation"""
+"""
+Writer Agent — IEEE-format Research Paper Generation
+Generates a complete IEEE-format research paper with proper citations.
+"""
 
-import json, re
+import json
+import re
 from typing import Dict, List, Any
 from core.llm_client import LLMClient
-from core.utils import safe_parse_llm_json, truncate_text
-
-WRITER_SYSTEM = (
-    "You are an expert academic writer. Generate a complete IEEE-format research paper. "
-    "Use formal academic English. Every section must be substantive (minimum 3 paragraphs). "
-    "Cite papers using [N] notation matching the references array id fields. "
-    "In related_work cite at least 3 references. In methodology cite at least 2. "
-    "Return ONLY valid JSON."
-)
 
 
-async def run_report_generation(idea: Dict, papers: List[Dict], gaps: List[Dict], plan: Dict, intent: Dict, llm: LLMClient) -> Dict:
-    domain = ", ".join(intent.get("domain", ["AI/ML"]))
-    refs = _build_references(papers[:15])
-    refs_text = "\n".join(f"[{r['id']}] {r['authors']} ({r['year']}). {r['title']}." for r in refs[:12])
-    gaps_text = "; ".join(g.get("title","") for g in gaps[:3])
-    datasets_text = ", ".join(d.get("name","") for d in plan.get("datasets",[])[:3]) or "standard benchmarks"
-    metrics_text = ", ".join(plan.get("evaluation_metrics",[])[:4]) or "accuracy, F1"
-    github_refs = [p.get("github_url","") for p in papers if p.get("github_url")][:2]
+WRITER_SYSTEM = """You are an expert academic writer. Generate a complete IEEE-format research paper. \
+Use formal academic English. Every section must be substantive (minimum 3 paragraphs). \
+Cite papers using [N] notation where N matches the id field in the references array. \
+The references array must be numbered starting from 1. Every paper mentioned in any section \
+must appear in the references array. Section content must mention at least 3 different [N] \
+citations in related_work and at least 2 in methodology. Return ONLY valid JSON."""
 
-    prompt = f"""Write a complete IEEE-format research paper for this study.
+WRITER_PROMPT = """Write a complete IEEE-format research paper for this project.
 
-Title: {idea.get('title','')}
+Title: {title}
 Domain: {domain}
-Description: {idea.get('description','')}
-Approach: {idea.get('approach','')}
-Novelty: {idea.get('novelty','')}
-Gaps Addressed: {gaps_text}
-Datasets: {datasets_text}
-Evaluation Metrics: {metrics_text}
-{'GitHub references: ' + ', '.join(github_refs) if github_refs else ''}
+Idea: {description}
+Approach: {approach}
+Novelty: {novelty}
+Related Papers (use these as references with [N] citations):
+{related_papers}
+Gaps Addressed: {gaps}
+Plan Overview: {overview}
 
-Available References (use [N] citations in text):
-{refs_text}
-
-Return this exact JSON structure:
+Return this EXACT JSON structure:
 {{
-  "title": "Full IEEE-style paper title",
+  "title": "Full Paper Title — Descriptive and Specific",
   "authors": ["Author Name"],
-  "abstract": "150-200 words: motivation sentence, problem sentence, approach sentence, key result sentence, significance sentence",
-  "keywords": ["keyword1","keyword2","keyword3","keyword4","keyword5"],
+  "abstract": "150-200 words structured as: motivation sentence, problem sentence, approach sentence, key result sentence, significance sentence",
+  "keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5"],
   "sections": [
-    {{"id":"introduction","heading":"I. INTRODUCTION","content":"3+ paragraphs with [N] citations..."}},
-    {{"id":"related_work","heading":"II. RELATED WORK","content":"3+ paragraphs discussing related work with [N] citations..."}},
-    {{"id":"methodology","heading":"III. METHODOLOGY","content":"3+ paragraphs with technical detail and [N] citations..."}},
-    {{"id":"experimental_setup","heading":"IV. EXPERIMENTAL SETUP","content":"datasets, metrics, baselines..."}},
-    {{"id":"results","heading":"V. RESULTS AND DISCUSSION","content":"expected results analysis..."}},
-    {{"id":"conclusion","heading":"VI. CONCLUSION","content":"summary and future work..."}}
+    {{"id": "introduction", "heading": "I. INTRODUCTION", "content": "3+ paragraphs with [N] citations..."}},
+    {{"id": "related_work", "heading": "II. RELATED WORK", "content": "3+ paragraphs discussing related approaches with [1], [2], [3] citations..."}},
+    {{"id": "methodology", "heading": "III. METHODOLOGY", "content": "3+ paragraphs detailing the proposed method with [N] citations..."}},
+    {{"id": "experimental_setup", "heading": "IV. EXPERIMENTAL SETUP", "content": "3+ paragraphs on datasets, metrics, baselines..."}},
+    {{"id": "results", "heading": "V. RESULTS AND DISCUSSION", "content": "3+ paragraphs on expected/anticipated results and analysis..."}},
+    {{"id": "conclusion", "heading": "VI. CONCLUSION", "content": "3+ paragraphs summarizing contributions and future work..."}}
   ],
-  "acknowledgements": "This work was conducted as part of an AI-assisted research pipeline.",
-  "references": {json.dumps(refs[:12])}
-}}"""
+  "acknowledgements": "This work was supported by...",
+  "references": [
+    {{"id": 1, "authors": "Author1, Author2", "title": "Paper Title", "venue": "Conference/Journal", "year": "2024"}}
+  ]
+}}
+
+IMPORTANT: Every [N] citation in section content MUST have a matching reference with that id number."""
+
+
+async def run_report_generation(
+    idea: Dict,
+    papers: List[Dict],
+    gaps: List[Dict],
+    plan: Dict,
+    intent: Dict,
+    llm: LLMClient,
+) -> Dict:
+    """Generate an IEEE-format research paper."""
+    domain = ", ".join(intent.get("domain", ["AI/ML"]))
+    related = _format_papers_for_prompt(papers[:15])
+    gap_titles = [g.get("title", "") for g in gaps[:3]]
+
+    prompt = WRITER_PROMPT.format(
+        title=idea.get("title", "Research Project"),
+        domain=domain,
+        description=idea.get("description", ""),
+        approach=idea.get("approach", ""),
+        novelty=idea.get("novelty", ""),
+        related_papers=related,
+        gaps=", ".join(gap_titles) or "identified gaps",
+        overview=plan.get("overview", ""),
+    )
 
     try:
         raw = await llm.complete(prompt, system=WRITER_SYSTEM, json_mode=True)
-        result = safe_parse_llm_json(raw, default={})
-        if isinstance(result, dict) and "sections" in result:
-            result = _validate_citations(result)
+        result = _parse_json(raw)
+        if "sections" in result:
+            result = _postprocess_citations(result, papers)
             return result
+        return _fallback_report(idea, papers, gaps, intent)
     except Exception as e:
-        print(f"[Writer] LLM failed: {e}")
+        print(f"Writer agent error: {e}")
+        return _fallback_report(idea, papers, gaps, intent)
 
-    return _fallback_report(idea, papers, gaps, plan, intent)
 
-
-def _build_references(papers: List[Dict]) -> List[Dict]:
-    refs = []
+def _format_papers_for_prompt(papers: List[Dict]) -> str:
+    """Format papers for the LLM prompt with reference numbers."""
+    lines = []
     for i, p in enumerate(papers, 1):
-        authors_list = p.get("authors", [])
-        if isinstance(authors_list, list) and authors_list:
-            authors_str = authors_list[0] + (" et al." if len(authors_list) > 1 else "")
-        else:
-            authors_str = "Unknown Authors"
-        refs.append({
-            "id": i,
-            "authors": authors_str,
-            "title": p.get("title", "Unknown Title"),
-            "venue": p.get("source", "").replace("_", " ").title(),
-            "year": p.get("year", "n.d."),
-            "url": p.get("url", ""),
-        })
-    return refs
+        authors = ", ".join(p.get("authors", ["Unknown"])[:3])
+        title = p.get("title", "Untitled")
+        year = p.get("year", "N/A")
+        venue = p.get("source", "")
+        lines.append(f"[{i}] {authors} ({year}). \"{title}\". {venue}.")
+    return "\n".join(lines)
 
 
-def _validate_citations(report: Dict) -> Dict:
-    """Remove [N] citations that have no matching reference."""
-    valid_ids = {str(r["id"]) for r in report.get("references", [])}
+def _postprocess_citations(report: Dict, papers: List[Dict]) -> Dict:
+    """Validate and fix citations in the report."""
+    refs = report.get("references", [])
+
+    # Build set of valid reference ids
+    valid_ids = {r.get("id") for r in refs if isinstance(r, dict) and "id" in r}
+
+    # If references array is empty, auto-build from papers
+    if not refs:
+        refs = []
+        for i, paper in enumerate(papers[:15], 1):
+            refs.append({
+                "id": i,
+                "authors": ", ".join(paper.get("authors", ["Unknown"])[:3]),
+                "title": paper.get("title", ""),
+                "venue": paper.get("source", ""),
+                "year": paper.get("year", ""),
+            })
+        report["references"] = refs
+        valid_ids = {r["id"] for r in refs}
+
+    # Scan all section content and validate [N] references
     for section in report.get("sections", []):
         content = section.get("content", "")
-        # Remove invalid citations
-        def replace_cite(m):
-            n = m.group(1)
-            return m.group(0) if n in valid_ids else ""
-        section["content"] = re.sub(r"\[(\d+)\]", replace_cite, content)
+        # Find all [N] patterns
+        citation_pattern = re.compile(r'\[(\d+)\]')
+        matches = citation_pattern.findall(content)
+        for match in matches:
+            ref_id = int(match)
+            if ref_id not in valid_ids:
+                # Remove invalid citation
+                content = content.replace(f"[{match}]", "")
+        section["content"] = content
+
+    # Ensure sections have proper id fields
+    section_ids = ["introduction", "related_work", "methodology",
+                   "experimental_setup", "results", "conclusion"]
+    for i, section in enumerate(report.get("sections", [])):
+        if "id" not in section and i < len(section_ids):
+            section["id"] = section_ids[i]
+
+    # Ensure acknowledgements exists
+    if "acknowledgements" not in report:
+        report["acknowledgements"] = "The authors would like to thank the research community for their valuable contributions."
+
     return report
 
 
-def _fallback_report(idea: Dict, papers: List[Dict], gaps: List[Dict], plan: Dict, intent: Dict) -> Dict:
-    domain = ", ".join(intent.get("domain", ["AI/ML"]))
-    refs = _build_references(papers[:10])
+def _fallback_report(idea: Dict, papers: List[Dict], gaps: List[Dict], intent: Dict) -> Dict:
+    """Comprehensive IEEE-format fallback report."""
     title = idea.get("title", "Novel Research Contribution")
-    approach = idea.get("approach", "the proposed methodology")
-    novelty = idea.get("novelty", "an unexplored problem formulation")
-    gap_titles = "; ".join(g.get("title","") for g in gaps[:2])
-    datasets = ", ".join(d.get("name","") for d in plan.get("datasets",[])[:2]) or "standard benchmarks"
-    metrics = ", ".join(plan.get("evaluation_metrics",[])[:3]) or "accuracy, F1-score, AUC"
-    ref_text = lambda i: f"[{i}]" if i <= len(refs) else ""
+    domain = ", ".join(intent.get("domain", ["AI/ML"]))
+    approach = idea.get("approach", "a novel methodology")
+    novelty = idea.get("novelty", "unexplored problem formulation")
+    description = idea.get("description", "an identified research gap")
+
+    # Build references from papers
+    references = []
+    for i, paper in enumerate(papers[:15], 1):
+        references.append({
+            "id": i,
+            "authors": ", ".join(paper.get("authors", ["Unknown"])[:3]),
+            "title": paper.get("title", ""),
+            "venue": paper.get("source", ""),
+            "year": paper.get("year", ""),
+        })
+
+    # Build related work section using actual paper titles
+    related_work_paragraphs = []
+    if papers:
+        related_work_paragraphs.append(
+            f"The field of {domain} has witnessed significant advancements in recent years. "
+            f"Several notable contributions have shaped the current landscape of research in this area. "
+            f"In this section, we provide a comprehensive review of the most relevant prior work."
+        )
+        for i, p in enumerate(papers[:4], 1):
+            abstract_snippet = p.get("abstract", "")[:200]
+            related_work_paragraphs.append(
+                f"{p.get('title', 'Prior work')} [{i}] presented {abstract_snippet}..."
+            )
+        gap_names = "; ".join(g.get("title", "") for g in gaps[:2]) or "several open challenges"
+        related_work_paragraphs.append(
+            f"Despite these advances, {gap_names} remain unaddressed in the current literature. "
+            f"Our work builds upon these foundations while addressing the identified limitations."
+        )
+    else:
+        related_work_paragraphs.append(
+            f"Prior work in {domain} has explored various approaches to related problems. "
+            f"However, significant gaps remain that motivate the current research."
+        )
+
+    methods_list = ", ".join(idea.get("suggested_methods", ["deep learning", "transformer models"]))
+    datasets_list = ", ".join(idea.get("suggested_datasets", ["standard benchmarks"]))
 
     return {
         "title": title,
-        "authors": ["ResearchIDE User"],
+        "authors": ["ResearchIDE Author"],
         "abstract": (
-            f"Recent advances in {domain} have highlighted significant limitations in existing approaches. "
-            f"In particular, {gap_titles or 'identified gaps in the literature'} remain inadequately addressed. "
-            f"This paper proposes {approach} as a novel solution to these challenges. "
-            f"The proposed method is evaluated on {datasets} using {metrics}. "
-            f"Our approach demonstrates the potential to advance the state-of-the-art in {domain}, "
-            f"with implications for both research and practical deployment."
+            f"Recent advances in {domain} have demonstrated remarkable progress, yet significant "
+            f"challenges persist in addressing {description}. This paper presents a novel approach "
+            f"that leverages {approach} to tackle these challenges. Our method addresses the gap of "
+            f"{novelty} through a systematic methodology that combines established techniques with "
+            f"innovative modifications. Preliminary analysis and theoretical foundations suggest "
+            f"significant potential for improvement over existing state-of-the-art baselines, "
+            f"opening new directions for future research in {domain}."
         ),
-        "keywords": intent.get("keywords", ["machine learning","deep learning","research"])[:5],
+        "keywords": intent.get("keywords", ["machine learning", "deep learning", "research"])[:5],
         "sections": [
             {
                 "id": "introduction",
                 "heading": "I. INTRODUCTION",
                 "content": (
-                    f"The field of {domain} has witnessed remarkable progress in recent years, driven by advances in computational resources and large-scale datasets {ref_text(1)}. "
-                    f"Despite these advances, critical challenges persist that limit the practical applicability of existing methods {ref_text(2)}.\n\n"
-                    f"This work is motivated by the observation that {novelty}. "
-                    f"Specifically, we identify the following gaps in the existing literature: {gap_titles or 'methodological and dataset limitations'} {ref_text(3)}.\n\n"
-                    f"To address these limitations, we propose {approach}. "
-                    f"Our main contributions are: (1) a novel approach to {title}, "
-                    f"(2) empirical evaluation on {datasets}, and "
-                    f"(3) analysis of strengths, limitations, and future directions."
+                    f"The field of {domain} has seen rapid progress in recent years, driven by advances "
+                    f"in computational methods and the availability of large-scale datasets. Despite this "
+                    f"progress, significant challenges remain that limit the practical applicability of "
+                    f"current approaches. This work is motivated by {novelty}.\n\n"
+                    f"Specifically, we address the following research question: {description}. "
+                    f"Existing approaches have made notable contributions but fall short in several "
+                    f"critical aspects that our work aims to resolve.\n\n"
+                    f"Our main contributions are: (1) A novel approach to {title} that addresses "
+                    f"identified gaps in the literature, (2) A comprehensive experimental framework "
+                    f"for evaluating the proposed method against state-of-the-art baselines, and "
+                    f"(3) Detailed analysis of the method's strengths, limitations, and potential "
+                    f"for future extensions."
                 ),
             },
             {
                 "id": "related_work",
                 "heading": "II. RELATED WORK",
-                "content": (
-                    f"Prior work in {domain} has explored a variety of approaches. "
-                    + " ".join(
-                        f"{ref_text(i+1)} {truncate_text(p.get('abstract',''), 150)}"
-                        for i, p in enumerate(papers[:4])
-                    )
-                    + f"\n\nDespite these contributions, {gap_titles or 'key gaps'} remain unresolved, motivating the present work.\n\n"
-                    f"Our approach builds upon and extends these prior works by addressing the identified limitations through {approach}."
-                ),
+                "content": "\n\n".join(related_work_paragraphs),
             },
             {
                 "id": "methodology",
                 "heading": "III. METHODOLOGY",
                 "content": (
-                    f"We propose {title} to address the identified research gaps. "
-                    f"The methodology consists of the following key components.\n\n"
-                    f"Technical Approach: {approach} {ref_text(1)}. "
-                    f"The design choices are motivated by the need to overcome {gap_titles or 'existing limitations'}.\n\n"
-                    f"Implementation Details: The system is implemented using the tech stack described in the experimental setup. "
-                    f"All hyperparameters are tuned via grid search on the validation set."
+                    f"We propose {title} to address the identified gaps in the current literature. "
+                    f"Our approach builds upon established foundations while introducing key innovations "
+                    f"that differentiate it from prior work.\n\n"
+                    f"Technical Approach: {approach}. The methodology is designed to be modular and "
+                    f"extensible, allowing researchers to adapt individual components to their specific "
+                    f"requirements and constraints.\n\n"
+                    f"The core methods employed include: {methods_list}. Each component is carefully "
+                    f"designed to address specific aspects of the research problem while maintaining "
+                    f"computational efficiency and reproducibility."
                 ),
             },
             {
                 "id": "experimental_setup",
                 "heading": "IV. EXPERIMENTAL SETUP",
                 "content": (
-                    f"Datasets: We evaluate our approach on {datasets}. "
-                    f"These datasets were chosen for their relevance to {domain} and their widespread use as benchmarks {ref_text(2)}.\n\n"
-                    f"Evaluation Metrics: We report {metrics}. "
-                    f"These metrics capture both the accuracy and robustness of the proposed approach.\n\n"
-                    f"Baselines: We compare against {plan.get('baseline_comparison', 'state-of-the-art methods in the literature')}. "
-                    f"All baselines are evaluated under identical experimental conditions to ensure fair comparison."
+                    f"Datasets: We evaluate our approach on {datasets_list}. These datasets are "
+                    f"selected to provide comprehensive coverage of the problem space and enable "
+                    f"direct comparison with prior work.\n\n"
+                    f"Evaluation Metrics: We report accuracy, F1-score, precision, recall, and "
+                    f"domain-specific metrics as appropriate. Statistical significance is assessed "
+                    f"using paired t-tests with p < 0.05.\n\n"
+                    f"Baseline Comparisons: We compare against state-of-the-art methods reported "
+                    f"in the recent literature. All experiments are conducted with fixed random seeds "
+                    f"to ensure reproducibility."
                 ),
             },
             {
                 "id": "results",
                 "heading": "V. RESULTS AND DISCUSSION",
                 "content": (
-                    f"We anticipate that the proposed approach will demonstrate competitive or superior performance compared to existing baselines on the evaluation metrics ({metrics}).\n\n"
-                    f"Ablation studies will validate the contribution of each component of our proposed system. "
-                    f"Specifically, we will analyze the impact of the key design decisions described in Section III.\n\n"
-                    f"Error analysis will reveal failure modes and provide insights for future improvements. "
-                    f"We expect our approach to be particularly effective in scenarios characterized by {domain} constraints."
+                    "We anticipate that the proposed approach will demonstrate competitive or superior "
+                    "performance compared to existing baselines on the primary evaluation metrics. "
+                    "The experimental framework is designed to provide rigorous empirical evidence.\n\n"
+                    "Ablation studies will validate the contribution of each component of the proposed "
+                    "method. By systematically removing or modifying individual components, we can "
+                    "quantify their impact on overall performance.\n\n"
+                    "Error analysis will reveal failure modes and guide future improvements. "
+                    "Understanding when and why the method fails is critical for identifying "
+                    "opportunities for further research and development."
                 ),
             },
             {
                 "id": "conclusion",
                 "heading": "VI. CONCLUSION",
                 "content": (
-                    f"This paper presented {title}, a novel approach to addressing identified gaps in {domain}. "
-                    f"The proposed methodology targets {gap_titles or 'key research gaps'} and offers a principled solution grounded in {approach}.\n\n"
-                    f"The empirical evaluation on {datasets} is expected to demonstrate the effectiveness of our approach. "
-                    f"The results will contribute to the advancement of {domain} and provide practical guidance for practitioners.\n\n"
-                    f"Future work includes scaling to larger datasets, cross-domain transfer evaluation, "
-                    f"and integration with downstream applications. "
-                    f"We release our code and models to facilitate reproducibility and further research."
+                    f"This paper presented {title}, a novel contribution to the field of {domain}. "
+                    f"The proposed approach addresses identified gaps in the literature through "
+                    f"{approach}.\n\n"
+                    f"The key findings of this work demonstrate the potential of the proposed method "
+                    f"to advance the state of the art. The modular design of our approach facilitates "
+                    f"adaptation and extension by future researchers.\n\n"
+                    f"Future work includes scaling to larger datasets, cross-domain evaluation, "
+                    f"real-world deployment studies, and integration with complementary techniques "
+                    f"to further enhance performance and applicability."
                 ),
             },
         ],
-        "acknowledgements": "This research was conducted using AI-assisted tools for literature analysis and paper drafting.",
-        "references": refs,
+        "acknowledgements": "The authors would like to thank the research community for their valuable contributions and the developers of the open-source tools used in this work.",
+        "references": references,
         "_fallback": True,
     }
+
+
+def _parse_json(raw: str) -> Dict:
+    """Parse JSON from LLM response."""
+    clean = re.sub(r"```(?:json)?\s*", "", raw).strip().rstrip("`").strip()
+    s, e = clean.find("{"), clean.rfind("}") + 1
+    return json.loads(clean[s:e]) if s != -1 and e > s else {}

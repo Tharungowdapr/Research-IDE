@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DotGothic16&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,16 +6,16 @@
 
 @layer base {
   :root {
-    --bg-primary: #000000;
-    --bg-secondary: #0a0a0a;
-    --bg-card: #050505;
-    --bg-hover: #111111;
-    --border: #222222;
-    --text-primary: #ffffff;
-    --text-secondary: #a0a0a0;
-    --text-muted: #555555;
-    --accent: #E60000;
-    --accent-glow: rgba(230, 0, 0, 0.15);
+    --bg-primary: #0f0f13;
+    --bg-secondary: #16161e;
+    --bg-card: #1c1c28;
+    --bg-hover: #22222f;
+    --border: #2a2a3a;
+    --text-primary: #e8e8f0;
+    --text-secondary: #8888a8;
+    --text-muted: #55556a;
+    --accent: #6366f1;
+    --accent-glow: rgba(99, 102, 241, 0.15);
     --success: #10b981;
     --warning: #f59e0b;
     --danger: #ef4444;
@@ -38,33 +38,33 @@
 
 @layer components {
   .card {
-    @apply border bg-[var(--bg-card)] border-[var(--border)] p-5 rounded-none;
+    @apply rounded-xl border bg-[var(--bg-card)] border-[var(--border)] p-5;
   }
 
   .btn-primary {
-    @apply inline-flex items-center gap-2 rounded-none bg-brand-600 px-4 py-2 text-sm font-medium text-white
-      hover:bg-brand-500 active:bg-brand-700 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed uppercase font-mono tracking-widest;
+    @apply inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white
+      hover:bg-brand-500 active:bg-brand-700 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center gap-2 rounded-none border border-[var(--border)] bg-[var(--bg-secondary)]
+    @apply inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)]
       px-4 py-2 text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)]
-      transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed uppercase font-mono tracking-wide;
+      transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center gap-2 rounded-none px-3 py-2 text-sm font-medium text-[var(--text-secondary)]
-      hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-all duration-150 uppercase font-mono tracking-wide;
+    @apply inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[var(--text-secondary)]
+      hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-all duration-150;
   }
 
   .input {
-    @apply w-full rounded-none border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2
+    @apply w-full rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2
       text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
-      focus:outline-none focus:ring-1 focus:ring-brand-500 focus:border-brand-500 transition-all font-mono;
+      focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all;
   }
 
   .badge {
-    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-mono tracking-wider uppercase border;
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
   }
 
   .badge-blue  { @apply badge bg-blue-500/10 text-blue-400 border border-blue-500/20; }
@@ -85,25 +85,4 @@
   .glow-accent {
     box-shadow: 0 0 20px var(--accent-glow);
   }
-}
-
-/* ── Light mode ─────────────────────────────────────────── */
-[data-theme="light"] {
-  --bg-primary: #ffffff;
-  --bg-secondary: #fafafa;
-  --bg-card: #ffffff;
-  --bg-hover: #f5f5f5;
-  --border: #e0e0e0;
-  --text-primary: #000000;
-  --text-secondary: #333333;
-  --text-muted: #999999;
-  --accent: #E60000;
-  --accent-glow: rgba(230, 0, 0, 0.1);
-  --success: #059669;
-  --warning: #d97706;
-  --danger: #dc2626;
-}
-
-[data-theme="light"] .card {
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }

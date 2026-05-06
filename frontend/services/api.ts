@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import { fetchEventSource } from '@microsoft/fetch-event-source';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -9,23 +10,19 @@ const api: AxiosInstance = axios.create({
   timeout: 120000, // 2 minutes for LLM calls
 });
 
-export const getAuthToken = () => {
-  if (typeof window === 'undefined') return null;
-  try {
-    const stored = localStorage.getItem('research-ide-auth');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return parsed?.state?.accessToken || null;
-    }
-  } catch {}
-  return null;
-};
-
 // Request interceptor: attach auth token
 api.interceptors.request.use((config) => {
-  const token = getAuthToken();
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('research-ide-auth');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const token = parsed?.state?.accessToken;
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      }
+    } catch {}
   }
   return config;
 });
@@ -90,18 +87,12 @@ export const projectsAPI = {
     api.patch(`/projects/${id}/stage`, { stage }).then((r) => r.data),
 
   delete: (id: string) => api.delete(`/projects/${id}`).then((r) => r.data),
-
-  updateInput: (id: string, input_text: string, title?: string) =>
-    api.patch(`/projects/${id}/input`, { input_text, title }).then((r) => r.data),
 };
 
 // ── Pipeline ──────────────────────────────────────────────────────────────────
 export const pipelineAPI = {
   extractIntent: (projectId: string, text?: string) =>
     api.post('/pipeline/intent', { project_id: projectId, text }).then((r) => r.data),
-
-  addPaperManually: (projectId: string, data: { title: string; abstract?: string; authors?: string[]; year?: string; url?: string }) =>
-    api.post('/pipeline/papers/add', { project_id: projectId, ...data }).then((r) => r.data),
 
   retrievePapers: (projectId: string, maxPapers = 20) =>
     api.post('/pipeline/retrieve', { project_id: projectId, max_papers: maxPapers }).then((r) => r.data),
@@ -121,20 +112,79 @@ export const agentsAPI = {
   createPlan: (projectId: string) =>
     api.post('/agents/plan', { project_id: projectId }).then((r) => r.data),
 
+  createPlanStream: (projectId: string, onMessage: (chunk: string) => void, onDone: () => void, onError: (e: any) => void) => {
+    let token = '';
+    try {
+      const stored = localStorage.getItem('research-ide-auth');
+      if (stored) token = JSON.parse(stored)?.state?.accessToken || '';
+    } catch {}
+    
+    fetchEventSource(`${API_URL}/api/agents/plan/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ project_id: projectId }),
+      onmessage(ev) {
+        if (ev.data === '[DONE]') {
+          onDone();
+        } else {
+          try {
+            const parsed = JSON.parse(ev.data);
+            if (parsed.error) onError(new Error(parsed.error));
+            else if (parsed.chunk) onMessage(parsed.chunk);
+          } catch (e) {
+            console.error('Failed to parse SSE message:', e);
+          }
+        }
+      },
+      onerror(err) {
+        onError(err);
+        throw err; // Stop retrying
+      }
+    });
+  },
+
   generateCode: (projectId: string) =>
     api.post('/agents/generate-code', { project_id: projectId }).then((r) => r.data),
 
-  generateMoreIdeas: (projectId: string) =>
-    api.post('/agents/more-ideas', { project_id: projectId }).then((r) => r.data),
+  generateCodeStream: (projectId: string, onMessage: (chunk: string) => void, onDone: () => void, onError: (e: any) => void) => {
+    let token = '';
+    try {
+      const stored = localStorage.getItem('research-ide-auth');
+      if (stored) token = JSON.parse(stored)?.state?.accessToken || '';
+    } catch {}
+
+    fetchEventSource(`${API_URL}/api/agents/generate-code/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ project_id: projectId }),
+      onmessage(ev) {
+        if (ev.data === '[DONE]') {
+          onDone();
+        } else {
+          try {
+            const parsed = JSON.parse(ev.data);
+            if (parsed.error) onError(new Error(parsed.error));
+            else if (parsed.chunk) onMessage(parsed.chunk);
+          } catch (e) {
+            console.error('Failed to parse SSE message:', e);
+          }
+        }
+      },
+      onerror(err) {
+        onError(err);
+        throw err; // Stop retrying
+      }
+    });
+  },
 
   generateReport: (projectId: string) =>
     api.post('/agents/generate-report', { project_id: projectId }).then((r) => r.data),
-
-  submitUserIdea: (projectId: string, ideaText: string) =>
-    api.post('/agents/submit-user-idea', { project_id: projectId, idea_text: ideaText }).then((r) => r.data),
-
-  filterIdeas: (projectId: string, complexity?: string, feasibility?: string) =>
-    api.post('/agents/filter-ideas', { project_id: projectId, complexity, feasibility }).then((r) => r.data),
 };
 
 // ── LLM Config ───────────────────────────────────────────────────────────────
@@ -162,14 +212,3 @@ export const llmAPI = {
 };
 
 export default api;
-
-// ── Download helpers ──────────────────────────────────────────────────────────
-export const downloadAPI = {
-  docx: (projectId: string) =>
-    `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/agents/${projectId}/download/docx`,
-  pdf: (projectId: string) =>
-    `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/agents/${projectId}/download/pdf`,
-  fullProject: (projectId: string) =>
-    `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/export/${projectId}/export/full`,
-};
-

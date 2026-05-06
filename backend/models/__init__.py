@@ -1,2 +1,2 @@
 from models.user import User
-from models.project import Project, Output, PaperCache, OutputHistory
+from models.project import Project, Output, PaperCache

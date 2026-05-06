@@ -61,15 +61,3 @@ class PaperCache(Base):
     limitations = Column(JSON, default=list)
     embedding = Column(JSON)  # stored as list of floats
     cached_at = Column(DateTime, default=datetime.utcnow)
-
-
-class OutputHistory(Base):
-    """Stores versioned history of each output type per project."""
-    __tablename__ = "output_history"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    project_id = Column(String, ForeignKey("projects.id"), nullable=False, index=True)
-    output_type = Column(String, nullable=False)
-    version = Column(String, nullable=False)  # "v1", "v2", etc.
-    data = Column(JSON, nullable=False, default=dict)
-    created_at = Column(DateTime, default=datetime.utcnow)

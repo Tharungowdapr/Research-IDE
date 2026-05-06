@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { authAPI } from '@/services/api';
 import { User, Save, Loader2, Check } from 'lucide-react';
@@ -9,12 +9,25 @@ const SKILL_LEVELS = ['beginner', 'intermediate', 'advanced'];
 
 export default function ProfilePage() {
   const { user, setAuth, accessToken, refreshToken } = useAuthStore();
+  const [mounted, setMounted] = useState(false);
   const [form, setForm] = useState({
     name: user?.name || '',
     skill_level: user?.skill_level || 'intermediate',
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    if (user) {
+      setForm({
+        name: user.name || '',
+        skill_level: user.skill_level || 'intermediate',
+      });
+    }
+  }, [user]);
+
+  if (!mounted) return null;
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

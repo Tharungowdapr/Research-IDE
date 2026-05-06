@@ -5,7 +5,6 @@ import { Providers } from './providers';
 export const metadata: Metadata = {
   title: 'ResearchIDE — AI Research Assistant',
   description: 'From idea to research paper with AI-powered gap analysis and idea generation',
-  icons: { icon: '/favicon.svg' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

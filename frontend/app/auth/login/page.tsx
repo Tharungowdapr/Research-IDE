@@ -24,7 +24,12 @@ export default function LoginPage() {
       setAuth(data.user, data.access_token, data.refresh_token);
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Login failed. Please try again.');
+      const detail = err.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        setError(detail.map((d: any) => d.msg).join(', '));
+      } else {
+        setError(detail || 'Login failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

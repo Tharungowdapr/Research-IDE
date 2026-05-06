@@ -1,36 +1,19 @@
 name: CI
-
 on: [push, pull_request]
-
 jobs:
   backend:
-    name: Backend Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install system deps for WeasyPrint
-        run: sudo apt-get install -y libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 libffi-dev
-      - name: Install Python deps
-        run: cd backend && pip install -r requirements.txt
-      - name: Check dependency conflicts
-        run: cd backend && pip check
-      - name: Run tests
-        run: cd backend && python -m pytest tests/ -v --tb=short
-
+        with: { python-version: '3.11' }
+      - run: cd backend && pip install -r requirements.txt
+      - run: cd backend && python -m pytest tests/ -v --tb=short
   frontend:
-    name: Frontend Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install deps
-        run: cd frontend && npm ci
-      - name: Build
-        run: cd frontend && npm run build
-        env:
-          NEXT_PUBLIC_API_URL: http://localhost:8000
+        with: { node-version: '20' }
+      - run: cd frontend && npm ci
+      - run: cd frontend && npm run build

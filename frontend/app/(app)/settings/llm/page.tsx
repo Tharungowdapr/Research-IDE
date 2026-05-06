@@ -62,6 +62,7 @@ export default function LLMSettingsPage() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadData = async () => {
@@ -102,7 +103,7 @@ export default function LLMSettingsPage() {
     try {
       await llmAPI.saveApiKey(provider, key.trim());
       setKeyStatus((prev) =>
-        prev ? { ...prev, configured_providers: [...new Set([...prev.configured_providers, provider])] } : prev
+        prev ? { ...prev, configured_providers: Array.from(new Set([...prev.configured_providers, provider])) } : prev
       );
       setApiKeyInputs((prev) => ({ ...prev, [provider]: '' }));
     } catch (e) {

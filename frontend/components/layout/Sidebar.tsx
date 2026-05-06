@@ -1,12 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect } from 'react';
-import { useThemeStore } from '@/store/useThemeStore';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, FolderOpen, Plus, Settings, LogOut,
-  Brain, ChevronRight, Cpu, Sun, Moon,
+  Brain, ChevronRight, Cpu,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import clsx from 'clsx';
@@ -22,11 +20,6 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuthStore();
-  const { theme, toggleTheme } = useThemeStore();
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
 
   const handleLogout = () => {
     logout();
@@ -34,7 +27,7 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="hidden lg:flex fixed left-0 top-0 h-screen w-60 border-r border-[var(--border)] bg-[var(--bg-secondary)] flex-col z-40">
+    <aside className="fixed left-0 top-0 h-screen w-60 border-r border-[var(--border)] bg-[var(--bg-secondary)] flex flex-col z-40">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-5 py-5 border-b border-[var(--border)]">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white">
@@ -78,13 +71,6 @@ export function Sidebar() {
             <p className="text-xs font-medium text-[var(--text-primary)] truncate">{user?.name}</p>
             <p className="text-xs text-[var(--text-muted)] truncate">{user?.email}</p>
           </div>
-          <button
-            onClick={toggleTheme}
-            className="text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-          </button>
           <button
             onClick={handleLogout}
             className="text-[var(--text-muted)] hover:text-[var(--danger)] transition-colors"

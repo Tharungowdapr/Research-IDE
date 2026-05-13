@@ -13,8 +13,8 @@
 - [x] **3-Pass Gap Analysis** — Claim extraction → Gap identification → Scoring pipeline
 - [x] **Critic-Defender Idea Generation** — Adversarial loop: Generate → Critique → Defend & Refine
 - [x] **2-Pass Execution Planning** — Base plan + experiment configs, file structure, baselines
-- [x] **12-File Code Scaffold** — Complete runnable project with wandb, PyYAML, pytest, Makefile
-- [x] **SSE Real-time Streaming** — Live token streaming for Plan and Code generation
+- [x] **Research Guide & Presentation** — Detailed methodology, tools, timeline, and PPTX deck
+- [x] **SSE Real-time Streaming** — Live token streaming for Plan and Report generation
 - [x] **High-Capacity Research** — Scaled to 15+ gaps and 10+ ideas per project
 - [x] **IEEE Paper Generation** — Full research paper with proper citations and references
 - [x] **DOCX & PDF Export** — Download IEEE-format papers as Word or PDF documents
@@ -83,9 +83,9 @@ start.bat
 ```
 ┌──────────────────────────────────────────────────────┐
 │                    Frontend (Next.js 14)              │
-│  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐      │
-│  │Input │→│Papers│→│ Gaps │→│Ideas │→│ Plan │→...    │
-│  └──────┘ └──────┘ └──────┘ └──────┘ └──────┘       │
+│  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ │
+│  │Input │→│Papers│→│ Gaps │→│Ideas │→│ Plan │→│Guide │ │
+│  └──────┘ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘ │
 └────────────────────────┬─────────────────────────────┘
                          │ REST API
 ┌────────────────────────┴─────────────────────────────┐
@@ -93,7 +93,7 @@ start.bat
 │  ┌─────────┐  ┌──────────┐  ┌─────────────────────┐  │
 │  │ Auth    │  │ Pipeline │  │ Agents              │  │
 │  │ (JWT)   │  │ (Intent, │  │ (Gap, Idea, Plan,   │  │
-│  │         │  │  Retrieve)│  │  Code, Report)      │  │
+│  │         │  │  Retrieve)│  │  Guide, Report)     │  │
 │  └─────────┘  └──────────┘  └─────────────────────┘  │
 │  ┌─────────┐  ┌──────────────────────────────────┐   │
 │  │ SQLite  │  │ LLM Client (7 providers)         │   │
@@ -137,7 +137,8 @@ research-ide/
 │   │   ├── gap_miner/          # 3-pass gap analysis
 │   │   ├── idea_generator/     # Critic-Defender loop
 │   │   ├── planner/            # 2-pass planning
-│   │   ├── code_agent/         # 12-file scaffold
+│   │   ├── research_guide/     # Methodology & Tools expert
+│   │   ├── presentation/       # PPTX deck generator
 │   │   └── writer/             # IEEE paper generation
 │   ├── tests/                  # Pytest tests
 │   ├── scripts/                # Database seeding

@@ -8,6 +8,7 @@ import re
 import random
 from typing import List, Dict, Any
 from core.llm_client import LLMClient
+from core.quality_gate import validate_gaps_batch
 
 
 # ── Pass 1: Claim Extraction ─────────────────────────────────────────────────
@@ -83,7 +84,7 @@ async def run_gap_analysis(
 
     domain = ", ".join(intent.get("domain", ["AI/ML"]))
     problem = intent.get("problem_statement", intent.get("task", "research problem"))
-    papers_summary = _summarize_papers(papers[:15])
+    papers_summary = _summarize_papers(papers[:20])
 
     try:
         # Pass 1: Extract claims
@@ -127,6 +128,7 @@ async def run_gap_analysis(
             g["final_score"] = round(addr * 0.4 + imp * 0.4 + nov * 0.2, 2)
 
         gaps.sort(key=lambda g: g.get("final_score", 0), reverse=True)
+        gaps = validate_gaps_batch(gaps)
         return gaps
 
     except Exception as e:
@@ -169,7 +171,8 @@ def _summarize_papers(papers: List[Dict]) -> str:
     lines = []
     for i, p in enumerate(papers, 1):
         title = p.get("title", "Unknown")
-        abstract = p.get("abstract", "")[:200]
+        text = p.get("full_text") or p.get("abstract", "")
+        abstract = text[:800]
         year = p.get("year", "")
         citations = p.get("citations", "N/A")
         lines.append(f"{i}. [{year}] {title} (citations: {citations})\n   {abstract}...")

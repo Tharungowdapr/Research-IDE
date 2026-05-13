@@ -1,9 +1,11 @@
 """
-Agent Routes: Gap Analysis, Idea Generation, Planning, Code, Report, Downloads, Streaming
+Agent Routes: Gap Analysis, Idea Generation, Planning, Research Guide, Presentation, Report, Downloads, Streaming
 """
 
 import io
+import re
 import json as json_lib
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -18,8 +20,10 @@ from models.project import Project, Output
 from agents.gap_miner.gap_agent import run_gap_analysis
 from agents.idea_generator.idea_agent import run_idea_generation
 from agents.planner.planner_agent import run_planning, run_planning_stream
-from agents.code_agent.code_agent import run_code_generation, run_code_generation_stream
+from agents.research_guide.research_guide_agent import run_research_guide_generation
+from agents.presentation.presentation_agent import generate_slide_content, export_pptx
 from agents.writer.writer_agent import run_report_generation
+from agents.chat.rag_agent import chat_with_papers, chat_stream
 
 router = APIRouter()
 
@@ -131,10 +135,12 @@ async def create_plan(
         raise HTTPException(status_code=500, detail=f"Planning failed: {str(e)}")
 
     _save_output(db, project.id, "plan", plan)
-    project.current_stage = "code"
+    project.current_stage = "guide"
     db.commit()
 
     return {"project_id": project.id, "plan": plan}
+
+@router.post
 
 @router.post("/plan/stream")
 async def create_plan_stream(
@@ -156,26 +162,19 @@ async def create_plan_stream(
             full_content = ""
             async for chunk in run_planning_stream(selected.get("idea", {}), intent, llm, papers=papers_list):
                 full_content += chunk
-                # We yield the chunk as JSON. The frontend will reconstruct the string.
                 yield f"data: {json_lib.dumps({'chunk': chunk})}\n\n"
             
-            # When done, try to parse the full content to save to DB
             try:
-                import json
-                import re
-                
-                # Simple regex to find the first '{' and last '}'
                 content_to_parse = full_content.strip()
                 match = re.search(r'\{.*\}', content_to_parse, re.DOTALL)
                 if match:
                     content_to_parse = match.group(0)
                     
-                parsed_plan = json.loads(content_to_parse)
+                parsed_plan = json_lib.loads(content_to_parse)
                 _save_output(db, project.id, "plan", parsed_plan)
-                project.current_stage = "code"
+                project.current_stage = "guide"
                 db.commit()
             except Exception as e:
-                import logging
                 logging.error(f"Failed to parse streamed plan: {e}")
                 
             yield "data: [DONE]\n\n"
@@ -184,81 +183,93 @@ async def create_plan_stream(
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-@router.post("/generate-code")
-async def generate_code(
+# ── Research Guide & Presentation (replaces old Code Generation) ──────────────
+
+@router.post("/generate-guide")
+async def generate_guide(
     body: AgentRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Generate starter code for the selected idea and plan."""
+    """Generate research guide for the selected idea and plan."""
     project, papers_data, intent = _load_project_context(body.project_id, current_user.id, db)
     selected = _get_output(db, project.id, "selected_idea")
     plan = _get_output(db, project.id, "plan")
+    gaps = _get_output(db, project.id, "gaps")
     if not selected or not plan:
         raise HTTPException(status_code=400, detail="Complete planning step first")
 
     llm = build_llm_client_for_user(current_user)
 
-    file_hints = plan.get("file_structure", [])
-    papers_list = papers_data.get("papers", [])
-
     try:
-        code = await run_code_generation(selected.get("idea", {}), plan, llm, file_hints=file_hints, papers=papers_list)
+        guide = await run_research_guide_generation(
+            selected.get("idea", {}),
+            papers_data.get("papers", []),
+            gaps.get("gaps", []) if gaps else [],
+            plan,
+            intent,
+            llm,
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Code generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Research guide generation failed: {str(e)}")
 
-    _save_output(db, project.id, "code", code)
+    _save_output(db, project.id, "guide", guide)
     project.current_stage = "report"
     db.commit()
 
-    return {"project_id": project.id, "code": code}
+    return {"project_id": project.id, "guide": guide}
 
-@router.post("/generate-code/stream")
-async def generate_code_stream(
+
+@router.post("/generate-presentation")
+async def generate_presentation(
     body: AgentRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Generate starter code using SSE."""
+    """Generate slide content for the project."""
     project, papers_data, intent = _load_project_context(body.project_id, current_user.id, db)
     selected = _get_output(db, project.id, "selected_idea")
     plan = _get_output(db, project.id, "plan")
-    if not selected or not plan:
-        raise HTTPException(status_code=400, detail="Complete planning step first")
+    if not selected:
+        raise HTTPException(status_code=400, detail="Select an idea first")
 
     llm = build_llm_client_for_user(current_user)
-    file_hints = plan.get("file_structure", [])
-    papers_list = papers_data.get("papers", [])
 
-    async def event_generator():
-        try:
-            full_content = ""
-            async for chunk in run_code_generation_stream(selected.get("idea", {}), plan, llm, file_hints=file_hints, papers=papers_list):
-                full_content += chunk
-                yield f"data: {json_lib.dumps({'chunk': chunk})}\n\n"
-                
-            # When done, try to parse
-            try:
-                import json
-                
-                content_to_parse = full_content.strip()
-                match = re.search(r'\{.*\}', content_to_parse, re.DOTALL)
-                if match:
-                    content_to_parse = match.group(0)
-                    
-                parsed_code = json.loads(content_to_parse)
-                _save_output(db, project.id, "code", parsed_code)
-                project.current_stage = "report"
-                db.commit()
-            except Exception as e:
-                import logging
-                logging.error(f"Failed to parse streamed code: {e}")
+    try:
+        slides = await generate_slide_content(
+            selected.get("idea", {}),
+            papers_data.get("papers", []),
+            plan or {},
+            intent,
+            llm,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Presentation generation failed: {str(e)}")
 
-            yield "data: [DONE]\n\n"
-        except Exception as e:
-            yield f"data: {json_lib.dumps({'error': str(e)})}\n\n"
+    _save_output(db, project.id, "presentation", slides)
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return {"project_id": project.id, "slides": slides.get("slides", [])}
+
+
+@router.get("/{project_id}/download/pptx")
+async def download_pptx(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Download presentation as PPTX."""
+    _get_project(project_id, current_user.id, db)
+    slides_data = _get_output(db, project_id, "presentation")
+    if not slides_data:
+        raise HTTPException(status_code=400, detail="Generate the presentation first")
+
+    pptx_bytes = export_pptx(slides_data)
+
+    return StreamingResponse(
+        io.BytesIO(pptx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        headers={"Content-Disposition": "attachment; filename=research_presentation.pptx"},
+    )
 
 
 @router.post("/generate-report")
@@ -294,6 +305,64 @@ async def generate_report(
     db.commit()
 
     return {"project_id": project.id, "report": report}
+
+
+# ── Chat / RAG ────────────────────────────────────────────────────────────────
+
+class ChatRequest(BaseModel):
+    project_id: str
+    question: str
+    conversation_history: Optional[list] = None
+
+
+@router.post("/chat")
+async def chat_about_project(
+    body: ChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Answer a question about the project using RAG over retrieved papers."""
+    project, papers_data, intent = _load_project_context(body.project_id, current_user.id, db)
+    llm = build_llm_client_for_user(current_user)
+
+    try:
+        answer = await chat_with_papers(
+            body.question,
+            papers_data.get("papers", []),
+            intent,
+            llm,
+            conversation_history=body.conversation_history,
+        )
+        return {"answer": answer}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
+
+
+@router.post("/chat/stream")
+async def chat_stream_endpoint(
+    body: ChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Stream a chat response about the project."""
+    project, papers_data, intent = _load_project_context(body.project_id, current_user.id, db)
+    llm = build_llm_client_for_user(current_user)
+
+    async def event_generator():
+        try:
+            async for chunk in chat_stream(
+                body.question,
+                papers_data.get("papers", []),
+                intent,
+                llm,
+                conversation_history=body.conversation_history,
+            ):
+                yield f"data: {json_lib.dumps({'chunk': chunk})}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            yield f"data: {json_lib.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

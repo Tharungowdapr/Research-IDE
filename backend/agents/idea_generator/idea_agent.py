@@ -7,6 +7,7 @@ import json
 import re
 from typing import List, Dict, Any
 from core.llm_client import LLMClient
+from core.quality_gate import validate_ideas_batch
 
 
 # ── Round 1: Generate ────────────────────────────────────────────────────────
@@ -119,7 +120,8 @@ async def run_idea_generation(
             for idea in ideas:
                 idea["survived_critique"] = False
                 idea["critique_summary"] = "Critique unavailable"
-            return _rank_ideas(ideas)[:8]
+            ideas = _rank_ideas(ideas)[:8]
+            return validate_ideas_batch(ideas)
 
         # Apply critique filter
         critique_map = {c.get("idea_title", "").lower(): c for c in critiques}
@@ -171,7 +173,8 @@ async def run_idea_generation(
             idea.setdefault("assumptions", [])
             idea.setdefault("failure_modes", [])
 
-        return _rank_ideas(survivors)[:8]
+        ideas = _rank_ideas(survivors)[:8]
+        return validate_ideas_batch(ideas)
 
     except Exception as e:
         print(f"Idea generation error: {e}")
@@ -222,7 +225,10 @@ def _summarize_gaps(gaps: List[Dict]) -> str:
 
 
 def _summarize_papers_brief(papers: List[Dict]) -> str:
-    return "\n".join(f"- [{p.get('year', '')}] {p.get('title', '')}: {p.get('abstract', '')[:100]}..." for p in papers)
+    return "\n".join(
+        f"- [{p.get('year', '')}] {p.get('title', '')}: {(p.get('full_text') or p.get('abstract', ''))[:200]}..."
+        for p in papers
+    )
 
 
 def _rank_ideas(ideas: List[Dict]) -> List[Dict]:

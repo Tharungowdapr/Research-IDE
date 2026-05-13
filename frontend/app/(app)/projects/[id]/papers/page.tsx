@@ -84,11 +84,11 @@ export default function PapersPage() {
               <div>
                 <p className="font-medium text-[var(--text-secondary)] mb-1">Source</p>
                 <div className="space-y-1">
-                  {['arxiv', 'semantic_scholar'].map((src) => {
+                  {Array.from(new Set(papers.map((p) => p.source).filter(Boolean))).map((src) => {
                     const count = papers.filter((p) => p.source === src).length;
                     return (
                       <div key={src} className="flex justify-between">
-                        <span className="capitalize">{src.replace('_', ' ')}</span>
+                        <span className="capitalize">{String(src).replace('_', ' ')}</span>
                         <span className="badge-blue">{count}</span>
                       </div>
                     );
@@ -143,6 +143,11 @@ export default function PapersPage() {
                   <span className={paper.source === 'arxiv' ? 'badge-blue' : 'badge-purple'}>
                     {paper.source}
                   </span>
+                  {paper.full_text_status && (
+                    <span className={paper.full_text_status === 'full' ? 'badge-green' : 'badge-yellow'}>
+                      {paper.full_text_status === 'full' ? 'Full Text' : 'Abstract'}
+                    </span>
+                  )}
                 </div>
               </button>
             ))

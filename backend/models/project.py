@@ -3,7 +3,7 @@ Project and Output SQLAlchemy models
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, Text, JSON, ForeignKey
 from sqlalchemy.orm import relationship
 from core.database import Base
@@ -18,8 +18,8 @@ class Project(Base):
     input_text = Column(Text, nullable=False)
     status = Column(String, default="created")  # created | processing | ideas | planning | done
     current_stage = Column(String, default="input")  # input | papers | gaps | ideas | planner | code | report
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     outputs = relationship("Output", back_populates="project", cascade="all, delete-orphan")
@@ -35,7 +35,7 @@ class Output(Base):
     project_id = Column(String, ForeignKey("projects.id"), nullable=False, index=True)
     output_type = Column(String, nullable=False)  # intent | papers | gaps | ideas | plan | code | report
     data = Column(JSON, nullable=False, default=dict)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationship
     project = relationship("Project", back_populates="outputs")
@@ -51,6 +51,7 @@ class PaperCache(Base):
     external_id = Column(String, unique=True, index=True)  # DOI, arXiv ID, etc.
     title = Column(Text, nullable=False)
     abstract = Column(Text)
+    full_text = Column(Text)
     authors = Column(JSON, default=list)
     year = Column(String)
     citations = Column(String, default="0")
@@ -61,4 +62,4 @@ class PaperCache(Base):
     limitations = Column(JSON, default=list)
     full_text = Column(Text)  # Full text content from PDF/HTML
     embedding = Column(JSON)  # stored as list of floats
-    cached_at = Column(DateTime, default=datetime.utcnow)
+    cached_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

@@ -1,21 +1,25 @@
 """
-Paper Retrieval Service — Multi-source with scoring and deduplication.
+Paper Retrieval Service — Multi-source with scoring, deduplication, caching, and full-text extraction.
 Sources: arXiv, Semantic Scholar, OpenAlex, PapersWithCode
 """
 
 import httpx
 import asyncio
 import re
+import hashlib
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+from sqlalchemy.orm import Session
+from core.pdf_extractor import extract_full_text
 
 
 async def retrieve_papers(
     queries: List[str],
     keywords: List[str],
     max_results: int = 25,
+    db: Optional[Session] = None,
 ) -> List[Dict[str, Any]]:
-    """Retrieve, deduplicate, score, and rank papers from multiple sources."""
+    """Retrieve, deduplicate, score, rank, cache, and extract full text for papers."""
     all_papers = []
 
     tasks = []
@@ -33,22 +37,89 @@ async def retrieve_papers(
         elif isinstance(result, Exception):
             print(f"Retrieval task error: {result}")
 
-    # Deduplicate
     all_papers = _deduplicate(all_papers)
 
-    # Score and rank
     query_text = " ".join(queries + keywords)
     for paper in all_papers:
         paper["score"] = _compute_score(query_text, paper)
 
     all_papers.sort(key=lambda p: p.get("score", 0), reverse=True)
-    return all_papers[:max_results]
+    all_papers = all_papers[:max_results]
+
+    if db:
+        all_papers = await _cache_and_extract(all_papers, db)
+
+    return all_papers
+
+
+async def _cache_and_extract(
+    papers: List[Dict], db: Session
+) -> List[Dict]:
+    """Check cache, write new entries, and extract full text for top papers."""
+    from models.project import PaperCache
+    from core.database import SessionLocal
+
+    enriched = []
+    for i, paper in enumerate(papers):
+        external_id = paper.get("id", "")
+        title = paper.get("title", "")
+        cached = None
+        if external_id:
+            cached = db.query(PaperCache).filter(
+                PaperCache.external_id == external_id
+            ).first()
+
+        if cached and cached.full_text:
+            paper["full_text"] = cached.full_text
+            paper["full_text_status"] = "cached"
+            enriched.append(paper)
+            continue
+
+        if cached and cached.abstract:
+            paper["full_text"] = cached.abstract
+            paper["full_text_status"] = "abstract"
+            enriched.append(paper)
+            continue
+
+        entry = PaperCache(
+            external_id=external_id,
+            title=title,
+            abstract=paper.get("abstract", ""),
+            authors=paper.get("authors", []),
+            year=paper.get("year", ""),
+            citations=paper.get("citations", "0"),
+            source=paper.get("source", ""),
+            url=paper.get("url", ""),
+        )
+
+        if i < 5:
+            try:
+                full_text = await extract_full_text(paper)
+                if full_text and len(full_text) > len(paper.get("abstract", "")):
+                    entry.full_text = full_text
+                    paper["full_text"] = full_text
+                    paper["full_text_status"] = "full"
+                else:
+                    paper["full_text"] = paper.get("abstract", "")
+                    paper["full_text_status"] = "abstract"
+            except Exception as e:
+                print(f"Full-text extraction failed for {title}: {e}")
+                paper["full_text"] = paper.get("abstract", "")
+                paper["full_text_status"] = "abstract"
+        else:
+            paper["full_text"] = paper.get("abstract", "")
+            paper["full_text_status"] = "abstract"
+
+        db.add(entry)
+        db.commit()
+        enriched.append(paper)
+
+    return enriched
 
 
 # ── Scoring ───────────────────────────────────────────────────────────────────
 
 def _compute_score(query: str, paper: Dict) -> float:
-    """Compute ranking score: relevance*0.5 + recency*0.3 + citation*0.2"""
     relevance = _relevance_score(query, paper.get("title", ""), paper.get("abstract", ""))
     recency = _recency_score(paper.get("year", ""))
     citation = _citation_weight(paper.get("citations", "0"))
@@ -56,7 +127,11 @@ def _compute_score(query: str, paper: Dict) -> float:
 
 
 def _relevance_score(query: str, title: str, abstract: str) -> float:
-    query_terms = set(w.lower() for w in query.split() if len(w) > 3)
+    research_terms = {"ai", "ml", "nlp", "cv", "llm", "cnn", "rnn", "gnn", "rl", "gan", "vae", "iot"}
+    query_terms = set(
+        w.lower() for w in query.split()
+        if len(w) > 3 or w.lower() in research_terms
+    )
     if not query_terms:
         return 0.5
     paper_text = (title + " " + abstract).lower()
@@ -183,8 +258,9 @@ async def _fetch_semantic_scholar(query: str, max_results: int = 10) -> List[Dic
 async def _fetch_openalex(query: str, max_results: int = 10) -> List[Dict]:
     try:
         url = "https://api.openalex.org/works"
-        params = {"search": query, "per_page": max_results, "mailto": "research@ide.app"}
-        headers = {"User-Agent": "ResearchIDE/1.0 (mailto:research@ide.app)"}
+        mailto = "research@ide.app"
+        params = {"search": query, "per_page": max_results, "mailto": mailto}
+        headers = {"User-Agent": f"ResearchIDE/1.0 (mailto:{mailto})"}
         async with httpx.AsyncClient(timeout=12.0) as client:
             resp = await client.get(url, params=params, headers=headers)
             if resp.status_code == 429:

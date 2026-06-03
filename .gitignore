@@ -36,3 +36,4 @@ outputs/
 checkpoints/
 *.gguf
 *.bin
+.cloud/.env.cloud

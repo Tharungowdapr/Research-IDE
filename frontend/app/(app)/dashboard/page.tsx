@@ -131,7 +131,9 @@ export default function DashboardPage() {
                       </span>
                       <span className="flex items-center gap-1 text-xs text-[var(--text-muted)]">
                         <Clock size={10} />
-                        {formatDistanceToNow(new Date(project.updated_at), { addSuffix: true })}
+                        {project.updated_at
+                          ? formatDistanceToNow(new Date(project.updated_at), { addSuffix: true })
+                          : 'recently'}
                       </span>
                     </div>
                   </div>

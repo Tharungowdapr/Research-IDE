@@ -4,11 +4,14 @@ import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
-  Brain, BookOpen, Search, Lightbulb, Cpu, Code2,
-  FileText, ChevronRight, ArrowLeft,
+  Brain, BookOpen, Search, Lightbulb, Cpu, BookOpenCheck,
+  FileText, ChevronRight, ArrowLeft, Zap,
 } from 'lucide-react';
 import { projectsAPI } from '@/services/api';
 import clsx from 'clsx';
+import dynamic from 'next/dynamic';
+
+const ChatPanel = dynamic(() => import('@/components/project/ChatPanel'), { ssr: false });
 
 const STEPS = [
   { key: 'input',   label: 'NLP Analysis',     icon: Brain,     step: 1 },
@@ -16,7 +19,7 @@ const STEPS = [
   { key: 'gaps',    label: 'Gap Analysis',     icon: Search,    step: 3 },
   { key: 'ideas',   label: 'Ideas',            icon: Lightbulb, step: 4 },
   { key: 'planner', label: 'Execution Plan',   icon: Cpu,       step: 5 },
-  { key: 'code',    label: 'Code',             icon: Code2,     step: 6 },
+  { key: 'guide',   label: 'Research Guide',   icon: BookOpenCheck, step: 6 },
   { key: 'report',  label: 'Paper',            icon: FileText,  step: 7 },
 ];
 
@@ -81,12 +84,26 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
             );
           })}
         </nav>
+
+        {/* Auto Pipeline Button */}
+        <div className="px-3 py-3 border-t border-[var(--border)]">
+          <Link
+            href={`/projects/${id}/input`}
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs bg-brand-600/20 text-brand-400 hover:bg-brand-600/30 transition-all"
+          >
+            <Zap size={12} />
+            <span>Run Full Analysis</span>
+          </Link>
+        </div>
       </aside>
 
       {/* Page Content */}
       <main className="flex-1 overflow-auto">
         {children}
       </main>
+
+      {/* Floating Chat Panel */}
+      <ChatPanel projectId={id} />
     </div>
   );
 }

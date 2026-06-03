@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Brain, ArrowRight, Loader2, Tag, Search, AlertCircle,
-  Lightbulb, Globe, Cpu, CheckCircle2,
+  Lightbulb, Globe, Cpu, CheckCircle2, Zap,
 } from 'lucide-react';
 import { projectsAPI, pipelineAPI } from '@/services/api';
+import AutoPipeline from '@/components/project/AutoPipeline';
 
 export default function ProjectInputPage() {
   const { id } = useParams<{ id: string }>();
@@ -213,6 +214,11 @@ export default function ProjectInputPage() {
           </div>
         </div>
       )}
+
+      {/* Auto Pipeline */}
+      <div className="mt-6">
+        <AutoPipeline projectId={id} />
+      </div>
     </div>
   );
 }

@@ -96,6 +96,26 @@ export const pipelineAPI = {
 
   retrievePapers: (projectId: string, maxPapers = 20) =>
     api.post('/pipeline/retrieve', { project_id: projectId, max_papers: maxPapers }).then((r) => r.data),
+
+  runFullPipeline: (projectId: string, onMessage: (data: any) => void, onDone: () => void, onError: (e: any) => void) => {
+    let token = '';
+    try {
+      const stored = localStorage.getItem('research-ide-auth');
+      if (stored) token = JSON.parse(stored)?.state?.accessToken || '';
+    } catch {}
+
+    fetchEventSource(`${API_URL}/api/pipeline/run-full`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ project_id: projectId }),
+      onmessage(ev) {
+        if (ev.data === '[DONE]') { onDone(); return; }
+        try { onMessage(JSON.parse(ev.data)); }
+        catch (e) { console.error('Failed to parse SSE message:', e); }
+      },
+      onerror(err) { onError(err); throw err; }
+    });
+  },
 };
 
 // ── Papers (Full Text) ──────────────────────────────────────────────
@@ -152,42 +172,11 @@ export const agentsAPI = {
     });
   },
 
-  generateCode: (projectId: string) =>
-    api.post('/agents/generate-code', { project_id: projectId }).then((r) => r.data),
+  generateGuide: (projectId: string) =>
+    api.post('/agents/generate-guide', { project_id: projectId }).then((r) => r.data),
 
-  generateCodeStream: (projectId: string, onMessage: (chunk: string) => void, onDone: () => void, onError: (e: any) => void) => {
-    let token = '';
-    try {
-      const stored = localStorage.getItem('research-ide-auth');
-      if (stored) token = JSON.parse(stored)?.state?.accessToken || '';
-    } catch {}
-
-    fetchEventSource(`${API_URL}/api/agents/generate-code/stream`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ project_id: projectId }),
-      onmessage(ev) {
-        if (ev.data === '[DONE]') {
-          onDone();
-        } else {
-          try {
-            const parsed = JSON.parse(ev.data);
-            if (parsed.error) onError(new Error(parsed.error));
-            else if (parsed.chunk) onMessage(parsed.chunk);
-          } catch (e) {
-            console.error('Failed to parse SSE message:', e);
-          }
-        }
-      },
-      onerror(err) {
-        onError(err);
-        throw err; // Stop retrying
-      }
-    });
-  },
+  generatePresentation: (projectId: string) =>
+    api.post('/agents/generate-presentation', { project_id: projectId }).then((r) => r.data),
 
   generateReport: (projectId: string) =>
     api.post('/agents/generate-report', { project_id: projectId }).then((r) => r.data),
@@ -215,6 +204,36 @@ export const llmAPI = {
 
   testConnection: (data: { provider: string; model?: string; api_key?: string; ollama_base_url?: string }) =>
     api.post('/llm/test', data).then((r) => r.data),
+};
+
+// ── Chat ──────────────────────────────────────────────────────────────────────
+export const chatAPI = {
+  sendMessage: (projectId: string, question: string, history?: any[]) =>
+    api.post('/agents/chat', { project_id: projectId, question, conversation_history: history }).then((r) => r.data),
+
+  sendMessageStream: (projectId: string, question: string, history: any[],
+    onMessage: (chunk: string) => void, onDone: () => void, onError: (e: any) => void) => {
+    let token = '';
+    try {
+      const stored = localStorage.getItem('research-ide-auth');
+      if (stored) token = JSON.parse(stored)?.state?.accessToken || '';
+    } catch {}
+
+    fetchEventSource(`${API_URL}/api/agents/chat/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ project_id: projectId, question, conversation_history: history }),
+      onmessage(ev) {
+        if (ev.data === '[DONE]') { onDone(); return; }
+        try {
+          const parsed = JSON.parse(ev.data);
+          if (parsed.error) onError(new Error(parsed.error));
+          else if (parsed.chunk) onMessage(parsed.chunk);
+        } catch (e) { console.error('Failed to parse SSE message:', e); }
+      },
+      onerror(err) { onError(err); throw err; }
+    });
+  },
 };
 
 export default api;

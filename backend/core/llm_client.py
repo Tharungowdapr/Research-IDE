@@ -454,7 +454,10 @@ class LLMClient:
     async def test_connection(self) -> dict:
         """Test if the LLM provider is reachable and the key is valid."""
         try:
-            result = await self.complete("Say 'OK' in exactly one word.", max_tokens=10 if hasattr(self, 'max_tokens') else None)
+            original_max = self.max_tokens
+            self.max_tokens = 10
+            result = await self.complete("Say 'OK' in exactly one word.")
+            self.max_tokens = original_max
             return {"success": True, "response": result[:50]}
         except Exception as e:
             return {"success": False, "error": str(e)}

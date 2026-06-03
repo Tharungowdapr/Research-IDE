@@ -180,7 +180,7 @@ async def export_full_project(
         raise HTTPException(status_code=404, detail="Project not found")
 
     # Gather all outputs
-    output_types = ["papers", "gaps", "ideas", "plan", "code", "report", "intent"]
+    output_types = ["papers", "gaps", "ideas", "plan", "guide", "presentation", "report", "intent"]
     outputs = {}
     for ot in output_types:
         data = _get_output(db, project_id, ot)
@@ -198,6 +198,10 @@ async def export_full_project(
             zf.writestr("analysis/ideas.md", _ideas_to_md(outputs["ideas"]))
         if outputs.get("plan"):
             zf.writestr("plan/execution_plan.md", _plan_to_md(outputs["plan"]))
+        if outputs.get("guide"):
+            zf.writestr("guide/research_guide.md", json.dumps(outputs["guide"], indent=2))
+        if outputs.get("presentation"):
+            zf.writestr("guide/presentation_slides.md", json.dumps(outputs["presentation"], indent=2))
         if outputs.get("report"):
             zf.writestr("report/research_paper.md", _report_to_md(outputs["report"]))
         # Raw JSON data

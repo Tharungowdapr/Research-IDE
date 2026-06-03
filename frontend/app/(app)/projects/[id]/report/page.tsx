@@ -16,12 +16,20 @@ export default function ReportPage() {
   useEffect(() => {
     projectsAPI.get(id).then((p) => {
       if (p.outputs?.report) setReport(p.outputs.report);
-      else {
-        agentsAPI.generateReport(id).then((r) => setReport(r.report)).catch(console.error);
-      }
       setLoading(false);
     });
   }, [id]);
+
+  const handleGenerate = async () => {
+    setLoading(true);
+    try {
+      const r = await agentsAPI.generateReport(id);
+      setReport(r.report);
+    } catch (e) {
+      console.error(e);
+    }
+    setLoading(false);
+  };
 
   const handleDownload = async (format: 'docx' | 'pdf' | 'md') => {
     if (!report) return;
@@ -82,11 +90,23 @@ export default function ReportPage() {
     );
   };
 
-  if (loading || !report) {
+  if (loading) {
     return (
       <div className="p-8 flex flex-col items-center justify-center min-h-[400px] gap-3">
         <Loader2 className="animate-spin text-brand-400" size={24} />
-        <p className="text-sm text-[var(--text-secondary)]">Generating research paper...</p>
+        <p className="text-sm text-[var(--text-secondary)]">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!report) {
+    return (
+      <div className="p-8 flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <FileText size={32} className="text-[var(--text-muted)]" />
+        <p className="text-sm text-[var(--text-secondary)]">No research paper generated yet.</p>
+        <button onClick={handleGenerate} className="btn-primary">
+          Generate Report
+        </button>
       </div>
     );
   }

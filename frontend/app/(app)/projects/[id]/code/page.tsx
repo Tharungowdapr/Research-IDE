@@ -22,45 +22,40 @@ export default function CodePage() {
     projectsAPI.get(id).then((p) => {
       if (p.outputs?.code) {
         setCodeData(p.outputs.code);
-        setLoading(false);
-      } else {
-        setStreaming(true);
-        agentsAPI.generateCodeStream(
-          id,
-          (chunk) => {
-            streamContent.current += chunk;
-            try {
-              // Attempt to strip markdown code blocks from stream if they exist
-              let contentToParse = streamContent.current.trim();
-              if (contentToParse.startsWith("```json")) contentToParse = contentToParse.substring(7);
-              else if (contentToParse.startsWith("```")) contentToParse = contentToParse.substring(3);
-              
-              const partial = parse(contentToParse);
-              if (partial && typeof partial === 'object' && Object.keys(partial).length > 0) {
-                setCodeData(partial);
-                setLoading(false);
-              }
-            } catch (e) {
-              // Ignore partial parse errors while streaming
-            }
-          },
-          () => {
-            // Done streaming
-            setStreaming(false);
-            setLoading(false);
-            projectsAPI.get(id).then(updated => {
-                if (updated.outputs?.code) setCodeData(updated.outputs.code);
-            });
-          },
-          (err) => {
-            console.error('Code generation failed', err);
-            setLoading(false);
-            setStreaming(false);
-          }
-        );
       }
+      setLoading(false);
     });
   }, [id]);
+
+  const handleGenerate = () => {
+    setStreaming(true);
+    agentsAPI.generateCodeStream(
+      id,
+      (chunk) => {
+        streamContent.current += chunk;
+        try {
+          let contentToParse = streamContent.current.trim();
+          if (contentToParse.startsWith("```json")) contentToParse = contentToParse.substring(7);
+          else if (contentToParse.startsWith("```")) contentToParse = contentToParse.substring(3);
+          
+          const partial = parse(contentToParse);
+          if (partial && typeof partial === 'object' && Object.keys(partial).length > 0) {
+            setCodeData(partial);
+          }
+        } catch (e) {}
+      },
+      () => {
+        setStreaming(false);
+        projectsAPI.get(id).then(updated => {
+            if (updated.outputs?.code) setCodeData(updated.outputs.code);
+        });
+      },
+      (err) => {
+        console.error('Code generation failed', err);
+        setStreaming(false);
+      }
+    );
+  };
 
   const handleCopy = () => {
     const file = codeData?.files?.[activeFile];
@@ -106,7 +101,28 @@ export default function CodePage() {
     return String(val);
   };
 
-  if (loading || !codeData) {
+  if (loading) {
+    return (
+      <div className="p-8 flex flex-col items-center justify-center min-h-[400px] gap-3">
+        <Loader2 className="animate-spin text-brand-400" size={24} />
+        <p className="text-sm text-[var(--text-secondary)]">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!codeData && !streaming) {
+    return (
+      <div className="p-8 flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <Code2 size={32} className="text-[var(--text-muted)]" />
+        <p className="text-sm text-[var(--text-secondary)]">No starter code generated yet.</p>
+        <button onClick={handleGenerate} className="btn-primary">
+          Generate Code
+        </button>
+      </div>
+    );
+  }
+
+  if (streaming && !codeData) {
     return (
       <div className="p-8 flex flex-col items-center justify-center min-h-[400px] gap-3">
         <Loader2 className="animate-spin text-brand-400" size={24} />
@@ -114,6 +130,8 @@ export default function CodePage() {
       </div>
     );
   }
+
+  if (!codeData) return null;
 
   const files = codeData.files || [];
   const activeFileData = files[activeFile];

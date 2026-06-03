@@ -172,6 +172,40 @@ export const agentsAPI = {
     });
   },
 
+  generateCodeStream: (projectId: string, onMessage: (chunk: string) => void, onDone: () => void, onError: (e: any) => void) => {
+    let token = '';
+    try {
+      const stored = localStorage.getItem('research-ide-auth');
+      if (stored) token = JSON.parse(stored)?.state?.accessToken || '';
+    } catch {}
+    
+    fetchEventSource(`${API_URL}/api/agents/generate-code/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ project_id: projectId }),
+      onmessage(ev) {
+        if (ev.data === '[DONE]') {
+          onDone();
+        } else {
+          try {
+            const parsed = JSON.parse(ev.data);
+            if (parsed.error) onError(new Error(parsed.error));
+            else if (parsed.chunk) onMessage(parsed.chunk);
+          } catch (e) {
+            console.error('Failed to parse SSE message:', e);
+          }
+        }
+      },
+      onerror(err) {
+        onError(err);
+        throw err;
+      }
+    });
+  },
+
   generateGuide: (projectId: string) =>
     api.post('/agents/generate-guide', { project_id: projectId }).then((r) => r.data),
 

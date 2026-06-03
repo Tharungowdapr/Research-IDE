@@ -1,30 +1,41 @@
 """
-Gap Mining Agent — 3-Pass Pipeline
+Gap Mining Agent — 3-Pass Pipeline with Full Text Analysis
 Pass 1: Claim Extraction | Pass 2: Gap Identification | Pass 3: Scoring (skip for Ollama)
 """
 
 import json
 import re
 import random
+import asyncio
 from typing import List, Dict, Any
+from sqlalchemy.orm import Session
 from core.llm_client import LLMClient
+from core.pdf_extractor import extract_full_text
+from services.cache_service import get_cached_paper, cache_full_text
 
 
 # ── Pass 1: Claim Extraction ─────────────────────────────────────────────────
 
 CLAIM_SYSTEM = "You are a scientific claim extractor. Return ONLY a valid JSON array."
 
-CLAIM_PROMPT = """Read these paper abstracts and extract research claims.
+CLAIM_PROMPT = """Read these paper summaries (including full text where available) and extract research claims.
 
 Papers:
 {papers_summary}
 
 Return a JSON array of claims:
 [
-  {{"paper_title": "...", "claim": "...", "type": "contribution|limitation|future_work|assumption"}}
+  {{"paper_title": "...", "claim": "...", "type": "contribution|limitation|future_work|assumption|method|result"}}
 ]
 
-Extract up to 60 claims total. Each claim should be one specific sentence."""
+Extract up to 60 claims total. Focus on:
+- Methodological limitations and gaps
+- Unexplored aspects mentioned in the paper
+- Future work suggestions from the authors
+- Assumptions that may not hold
+- Evaluation gaps or dataset limitations
+
+Each claim should be one specific sentence."""
 
 
 # ── Pass 2: Gap Identification ────────────────────────────────────────────────
@@ -76,34 +87,49 @@ async def run_gap_analysis(
     papers: List[Dict[str, Any]],
     intent: Dict,
     llm: LLMClient,
+    db: Session = None,
+    progress_callback: callable = None,
 ) -> List[Dict]:
-    """3-pass gap analysis pipeline."""
+    """3-pass gap analysis pipeline with full text analysis."""
     if not papers:
         return _default_gaps()
 
     domain = ", ".join(intent.get("domain", ["AI/ML"]))
     problem = intent.get("problem_statement", intent.get("task", "research problem"))
-    papers_summary = _summarize_papers(papers[:15])
+
+    # Fetch full text for top papers with persistent caching
+    if progress_callback:
+        progress_callback("Fetching full text for papers...", 10)
+    print(f"Fetching full text for {min(15, len(papers))} papers...")
+    enriched_papers = await _enrich_papers_with_full_text(papers[:15], db, progress_callback)
+    papers_summary = _summarize_papers(enriched_papers)
 
     try:
-        # Pass 1: Extract claims
-        claims = await _pass1_extract_claims(papers_summary, llm)
+        # Pass 1: Extract claims from full text
+        if progress_callback:
+            progress_callback("Extracting claims from papers...", 40)
+        try:
+            claims = await _pass1_extract_claims(papers_summary, llm)
+        except Exception as e:
+            print(f"Pass 1 JSON parse error: {e}")
+            claims = []
+        
         if not claims:
-            return _extracted_gaps_from_papers(papers)
+            return _extracted_gaps_from_papers(enriched_papers)
 
         # Limit claims
         if len(claims) > 40:
             random.seed(42)
             claims = random.sample(claims, 40)
-        # Truncate each claim
+        # Truncate each claim for pass 2
         for c in claims:
             if isinstance(c, dict) and "claim" in c:
-                c["claim"] = c["claim"][:200]
+                c["claim"] = c["claim"][:300]
 
         # Pass 2: Identify gaps
         gaps = await _pass2_identify_gaps(claims, domain, problem, llm)
         if not gaps:
-            return _extracted_gaps_from_papers(papers)
+            return _extracted_gaps_from_papers(enriched_papers)
         gaps = gaps[:15]
 
         # Pass 3: Score gaps (skip for Ollama)
@@ -131,7 +157,8 @@ async def run_gap_analysis(
 
     except Exception as e:
         print(f"Gap analysis pipeline error: {e}")
-        return _extracted_gaps_from_papers(papers)
+        # Return fallback gaps using enriched papers if available
+        return _extracted_gaps_from_papers(enriched_papers if 'enriched_papers' in locals() else papers)
 
 
 async def _pass1_extract_claims(papers_summary: str, llm: LLMClient) -> List[Dict]:
@@ -165,15 +192,102 @@ async def _pass3_score_gaps(gaps: List[Dict], llm: LLMClient) -> List[Dict]:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+async def _enrich_papers_with_full_text(papers: List[Dict], db: Session = None, progress_callback: callable = None) -> List[Dict]:
+    """Fetch full text for papers concurrently. Uses persistent cache if db is provided."""
+    enriched = []
+    total = len(papers)
+    
+    async def _fetch_one(paper, index):
+        enriched_paper = paper.copy()
+        paper_id = paper.get("id", paper.get("title", ""))
+        
+        # Check persistent cache first if db is available
+        if db:
+            cached = get_cached_paper(db, paper_id)
+            if cached and cached.get("full_text"):
+                print(f"Using persistently cached full text for: {paper.get('title', 'Unknown')[:50]}")
+                enriched_paper["full_text"] = cached["full_text"]
+                enriched_paper["full_text_summary"] = cached["full_text"][:2000] if len(cached["full_text"]) > 2000 else cached["full_text"]
+                if progress_callback:
+                    progress_callback(f"Loaded cached paper {index+1}/{total}", int(10 + (index+1) * 30 / total))
+                return enriched_paper
+        
+        # Fetch full text with timeout
+        try:
+            if progress_callback:
+                progress_callback(f"Fetching full text for paper {index+1}/{total}...", int(10 + (index+1) * 30 / total))
+            full_text = await asyncio.wait_for(
+                extract_full_text(paper),
+                timeout=30.0  # 30 second timeout per paper
+            )
+            # Cache in persistent storage if db is available
+            if db and full_text:
+                cache_full_text(db, paper_id, full_text)
+        except asyncio.TimeoutError:
+            print(f"Timeout fetching full text for {paper.get('title', 'Unknown')[:50]}")
+            full_text = paper.get("abstract", "")
+        except Exception as e:
+            print(f"Error extracting full text for {paper.get('title', 'Unknown')}: {e}")
+            full_text = paper.get("abstract", "")
+        
+        enriched_paper["full_text"] = full_text
+        # Store truncated version for summary (first 2000 chars for better analysis)
+        enriched_paper["full_text_summary"] = full_text[:2000] if full_text and len(full_text) > 2000 else full_text
+        if progress_callback:
+            progress_callback(f"Processed paper {index+1}/{total}", int(10 + (index+1) * 30 / total))
+        return enriched_paper
+    
+    # Fetch concurrently with a limit to avoid overwhelming the system
+    tasks = [_fetch_one(paper, i) for i, paper in enumerate(papers)]
+    enriched = await asyncio.gather(*tasks)
+    return enriched
+
+
 def _summarize_papers(papers: List[Dict]) -> str:
+    """Summarize papers prioritizing key sections from full text."""
     lines = []
     for i, p in enumerate(papers, 1):
         title = p.get("title", "Unknown")
-        abstract = p.get("abstract", "")[:200]
         year = p.get("year", "")
         citations = p.get("citations", "N/A")
-        lines.append(f"{i}. [{year}] {title} (citations: {citations})\n   {abstract}...")
+        
+        # Prioritize: full_text_summary > abstract
+        full_text = p.get("full_text", "")
+        if full_text and len(full_text) > 2000:
+            # Try to extract key sections (abstract, conclusion, limitations)
+            content = _extract_key_sections(full_text[:3000])
+        elif full_text:
+            content = full_text
+        else:
+            content = p.get("abstract", "")[:500]
+        
+        lines.append(f"{i}. [{year}] {title} (citations: {citations})\n   {content}...")
     return "\n\n".join(lines)
+
+
+def _extract_key_sections(text: str) -> str:
+    """Extract key sections like abstract, conclusion, limitations from full text."""
+    import re
+    # Look for section headers
+    sections = []
+    patterns = [
+        (r"abstract[:\s]*", "Abstract"),
+        (r"conclusion[:\s]*", "Conclusion"),
+        (r"limitation[:\s]*", "Limitations"),
+        (r"future work[:\s]*", "Future Work"),
+        (r"disussion[:\s]*", "Discussion"),
+    ]
+    
+    for pattern, name in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            start = match.end()
+            # Get next 500 chars after section header
+            sections.append(f"[{name}] {text[start:start+500]}")
+    
+    if sections:
+        return " | ".join(sections)
+    return text[:2000]
 
 
 def _parse_json_list(raw: str) -> List[Dict]:
@@ -190,16 +304,18 @@ def _parse_json_list(raw: str) -> List[Dict]:
 
 
 def _extracted_gaps_from_papers(papers: List[Dict]) -> List[Dict]:
-    """Rule-based fallback gap extraction."""
+    """Rule-based fallback gap extraction using full text when available."""
     limitation_keywords = ["however", "limitation", "future work", "not considered",
-                           "lack of", "insufficient", "limited", "cannot handle"]
+                           "lack of", "insufficient", "limited", "cannot handle", 
+                           "drawback", "shortcoming", "gap", "challenge"]
     gaps = []
     for paper in papers[:10]:
-        abstract = paper.get("abstract", "").lower()
+        # Use full text if available, otherwise abstract
+        text = paper.get("full_text", paper.get("abstract", "")).lower()
         for kw in limitation_keywords:
-            if kw in abstract:
-                idx = abstract.find(kw)
-                snippet = abstract[max(0, idx - 20):idx + 100]
+            if kw in text:
+                idx = text.find(kw)
+                snippet = text[max(0, idx - 50):idx + 200]
                 gaps.append({
                     "title": f"Gap from: {paper.get('title', 'Unknown')[:50]}",
                     "description": snippet,

@@ -1,0 +1,38 @@
+# Cloud Run Configuration (app.yaml)
+# Deploy to Cloud Run using: gcloud run deploy --source .
+
+runtime: python311
+entrypoint: uvicorn main:app --host 0.0.0.0 --port 8080
+
+env:
+  - name: PORT
+    value: "8080"
+  - name: ENVIRONMENT
+    value: "production"
+  - name: LOG_LEVEL
+    value: "INFO"
+
+# Resource configuration for Cloud Run
+automatic_scaling:
+  min_instances: 0  # Scale to zero when idle (FREE!)
+  max_instances: 2  # Max 2 instances to stay on free tier
+
+# Cloud Run deployment settings
+service_config:
+  memory_mb: 512  # 512 MB minimum for LLM operations
+  timeout_seconds: 3600  # 1 hour timeout for long-running operations
+  cpu: "1"  # 1 vCPU
+
+# Secrets to inject from Secret Manager
+secret_env_vars:
+  - name: SECRET_KEY
+    version: latest
+  - name: ENCRYPTION_KEY
+    version: latest
+  - name: GEMINI_API_KEY
+    version: latest
+
+# Allowable handlers
+handlers:
+  - url: ".*"
+    script: "auto"

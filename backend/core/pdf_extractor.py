@@ -12,6 +12,9 @@ except ImportError:
     fitz = None
 from bs4 import BeautifulSoup
 from typing import Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 async def extract_full_text(paper: dict) -> str:
@@ -22,8 +25,9 @@ async def extract_full_text(paper: dict) -> str:
 
     # 1. arXiv: Try ar5iv HTML first, then PDF
     if source == "arxiv" or "arxiv.org" in url:
+        # Extract arXiv ID handling versions (v2) and new-style IDs
         raw_id = pid.replace("arxiv_", "") if pid.startswith("arxiv_") else url.split("/")[-1]
-        raw_id = raw_id.replace(".pdf", "")
+        raw_id = raw_id.replace(".pdf", "").split("v")[0]  # Remove version suffix
         
         # Try ar5iv HTML (fast and clean)
         ar5iv_url = f"https://ar5iv.labs.arxiv.org/html/{raw_id}"
@@ -59,9 +63,11 @@ async def _fetch_html_text(url: str) -> Optional[str]:
             resp = await client.get(url)
             if resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, "html.parser")
-                # Remove math/scripts/styles for cleaner text
-                for el in soup(["script", "style", "math", "figure", "table"]):
+                # Remove only scripts and styles - PRESERVE math, figures, tables for research content
+                for el in soup(["script", "style"]):
                     el.extract()
+                
+                # Extract text while preserving structure
                 text = soup.get_text(separator="\n", strip=True)
                 return text
     except Exception as e:
@@ -71,6 +77,7 @@ async def _fetch_html_text(url: str) -> Optional[str]:
 
 async def _fetch_pdf_text(url: str) -> Optional[str]:
     if not fitz:
+        logger.warning(f"PyMuPDF not installed, skipping PDF extraction for {url}")
         return None
     try:
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
@@ -84,6 +91,6 @@ async def _fetch_pdf_text(url: str) -> Optional[str]:
                 doc.close()
                 return text
     except Exception as e:
-        print(f"[PDF Extract Error] {url}: {e}")
+        logger.error(f"[PDF Extract Error] {url}: {e}")
     return None
 

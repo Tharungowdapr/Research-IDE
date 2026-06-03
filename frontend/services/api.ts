@@ -7,7 +7,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const api: AxiosInstance = axios.create({
   baseURL: `${API_URL}/api`,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 120000, // 2 minutes for LLM calls
+  timeout: 300000, // 5 minutes for LLM calls with full text enrichment
 });
 
 // Request interceptor: attach auth token
@@ -96,6 +96,12 @@ export const pipelineAPI = {
 
   retrievePapers: (projectId: string, maxPapers = 20) =>
     api.post('/pipeline/retrieve', { project_id: projectId, max_papers: maxPapers }).then((r) => r.data),
+};
+
+// ── Papers (Full Text) ──────────────────────────────────────────────
+export const papersAPI = {
+  getFullText: (projectId: string, paperId: string) =>
+    api.get(`/projects/${projectId}/papers/${paperId}/full-text`).then((r) => r.data),
 };
 
 // ── Agents ───────────────────────────────────────────────────────────────────

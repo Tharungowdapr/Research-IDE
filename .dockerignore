@@ -1,0 +1,12 @@
+__pycache__
+*.pyc
+*.log
+.git/
+.gitignore
+.venv/
+venv/
+node_modules/
+frontend/
+cli/
+# Ignore .cloud/ directory specific to deployment tooling
+.cloud/

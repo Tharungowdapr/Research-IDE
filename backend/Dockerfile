@@ -7,14 +7,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy and install Python dependencies
-COPY requirements.txt .
+# Copy requirements.txt and install dependencies
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source code
-COPY . .
+# Copy the entire backend application
+COPY backend/ ./
 
-# Create data directory for SQLite
+# Create data directory for SQLite (if still used temporarily)
 RUN mkdir -p /app/data
 
 EXPOSE 8000

@@ -1,20 +1,21 @@
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*.egg-info/
+dist/
+build/
 venv/
-env/
+.venv/
 .env
 *.db
-*.sqlite3
+*.db-shm
+*.db-wal
 
 # Node
 node_modules/
 .next/
 .cache/
 dist/
-build/
 .env.local
 
 # IDE
@@ -30,11 +31,8 @@ Thumbs.db
 # Logs
 *.log
 
-# Ollama model files
-*.gguf
-*.bin
-
-# Generated outputs
-research_ide.db
+# Generated
 outputs/
 checkpoints/
+*.gguf
+*.bin

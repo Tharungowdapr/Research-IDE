@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://research-ide-frontend-6vx3cdjepa-el.a.run.app",
+        "https://research-ide-static-gen-lang-client-0492292104.storage.googleapis.com",
+        "https://gen-lang-client-0492292104.run.app",
     ]
 
     # ── LLM Provider Keys (users set these per-account, stored encrypted) ──
@@ -43,6 +46,9 @@ class Settings(BaseSettings):
 
     # Encryption key for storing user API keys
     ENCRYPTION_KEY: str = "change-this-32-char-encryption-key!"
+    
+    # Gemini API key
+    GEMINI_API_KEY: str = ""
 
     class Config:
         env_file = ".env"

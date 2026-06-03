@@ -39,12 +39,23 @@ export default function RegisterPage() {
       setAuth(data.user, data.access_token, data.refresh_token);
       router.push('/settings/llm');
     } catch (err: any) {
+      console.error('Registration error:', err);
       const detail = err.response?.data?.detail;
+      let errorMsg = 'Registration failed. ';
+
       if (Array.isArray(detail)) {
-        setError(detail.map((d: any) => d.msg).join(', '));
+        errorMsg += detail.map((d: any) => d.msg).join(', ');
+      } else if (typeof detail === 'string') {
+        errorMsg += detail;
+      } else if (err.response?.data?.message) {
+        errorMsg += err.response.data.message;
+      } else if (err.message) {
+        errorMsg += err.message;
       } else {
-        setError(detail || 'Registration failed. Please try again.');
+        errorMsg += 'Please try again or contact support.';
       }
+
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -107,11 +118,10 @@ export default function RegisterPage() {
               {form.password && (
                 <div className="mt-1.5 flex gap-1">
                   {['weak', 'medium', 'strong'].map((level) => (
-                    <div key={level} className={`h-1 flex-1 rounded-full transition-colors ${
-                      passwordStrength === 'weak' && level === 'weak' ? 'bg-red-500' :
-                      passwordStrength === 'medium' && ['weak','medium'].includes(level) ? 'bg-yellow-500' :
-                      passwordStrength === 'strong' ? 'bg-emerald-500' : 'bg-[var(--border)]'
-                    }`} />
+                    <div key={level} className={`h-1 flex-1 rounded-full transition-colors ${passwordStrength === 'weak' && level === 'weak' ? 'bg-red-500' :
+                        passwordStrength === 'medium' && ['weak', 'medium'].includes(level) ? 'bg-yellow-500' :
+                          passwordStrength === 'strong' ? 'bg-emerald-500' : 'bg-[var(--border)]'
+                      }`} />
                   ))}
                 </div>
               )}
@@ -124,11 +134,10 @@ export default function RegisterPage() {
                   <button
                     key={sl.value} type="button"
                     onClick={() => setForm({ ...form, skill_level: sl.value })}
-                    className={`relative rounded-lg border p-2.5 text-left text-xs transition-all ${
-                      form.skill_level === sl.value
+                    className={`relative rounded-lg border p-2.5 text-left text-xs transition-all ${form.skill_level === sl.value
                         ? 'border-brand-500 bg-brand-600/10 text-brand-400'
                         : 'border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--text-muted)]'
-                    }`}
+                      }`}
                   >
                     {form.skill_level === sl.value && (
                       <Check size={10} className="absolute top-1.5 right-1.5 text-brand-400" />

@@ -59,5 +59,6 @@ class PaperCache(Base):
     methods = Column(JSON, default=list)
     datasets = Column(JSON, default=list)
     limitations = Column(JSON, default=list)
+    full_text = Column(Text)  # Full text content from PDF/HTML
     embedding = Column(JSON)  # stored as list of floats
     cached_at = Column(DateTime, default=datetime.utcnow)

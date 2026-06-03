@@ -4,9 +4,13 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   BookOpen, ExternalLink, Users, Calendar, Star, ArrowRight,
-  Loader2, Search, Filter, AlertCircle,
+  Loader2, Search, Filter, AlertCircle, FileText, ChevronDown, ChevronUp,
+  BookMarked, Share2,
 } from 'lucide-react';
-import { projectsAPI, agentsAPI } from '@/services/api';
+import { projectsAPI, agentsAPI, papersAPI } from '@/services/api';
+import { showToast } from '@/components/ErrorToast';
+import { LiteratureReview } from '@/components/LiteratureReview';
+import CitationGraph from '@/components/CitationGraph';
 
 export default function PapersPage() {
   const { id } = useParams<{ id: string }>();
@@ -18,6 +22,9 @@ export default function PapersPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
+  const [showFullText, setShowFullText] = useState(false);
+  const [showLiteratureReview, setShowLiteratureReview] = useState(false);
+  const [showCitationGraph, setShowCitationGraph] = useState(false);
 
   useEffect(() => {
     projectsAPI.get(id).then((p) => {
@@ -25,6 +32,29 @@ export default function PapersPage() {
       setLoading(false);
     });
   }, [id]);
+
+  const fetchFullText = async (paper: any) => {
+    if (paper.full_text) return; // Already have it
+    try {
+      const data = await papersAPI.getFullText(id, paper.id);
+      if (data?.full_text) {
+        setPapers(prev => prev.map(p => 
+          p.id === paper.id ? { ...p, full_text: data.full_text } : p
+        ));
+        if (selectedPaper?.id === paper.id) {
+          setSelectedPaper({ ...selectedPaper, full_text: data.full_text });
+        }
+        if (data.source === 'cache') {
+          showToast('Full text loaded from cache', 'success');
+        }
+      } else {
+        showToast('Full text not available, using abstract', 'warning');
+      }
+    } catch (e: any) {
+      console.error('Failed to fetch full text:', e);
+      showToast('Failed to fetch full text: ' + e.message, 'error');
+    }
+  };
 
   const handleAnalyzeGaps = async () => {
     setAnalyzing(true);
@@ -72,6 +102,36 @@ export default function PapersPage() {
         </div>
       )}
 
+      {/* Analysis Tools */}
+      {papers.length > 0 && (
+        <div className="mb-4 flex items-center gap-2">
+          <button
+            onClick={() => { setShowLiteratureReview(!showLiteratureReview); setShowCitationGraph(false); }}
+            className={`btn-ghost text-xs flex items-center gap-1.5 ${showLiteratureReview ? 'bg-brand-600/20 text-brand-400' : ''}`}
+          >
+            <BookMarked size={13} /> Literature Review
+          </button>
+          <button
+            onClick={() => { setShowCitationGraph(!showCitationGraph); setShowLiteratureReview(false); }}
+            className={`btn-ghost text-xs flex items-center gap-1.5 ${showCitationGraph ? 'bg-brand-600/20 text-brand-400' : ''}`}
+          >
+            <Share2 size={13} /> Citation Graph
+          </button>
+        </div>
+      )}
+
+      {showLiteratureReview && (
+        <div className="mb-5">
+          <LiteratureReview projectId={id} />
+        </div>
+      )}
+
+      {showCitationGraph && (
+        <div className="mb-5">
+          <CitationGraph projectId={id} />
+        </div>
+      )}
+
       {/* 3-Column Layout */}
       <div className="grid grid-cols-12 gap-5">
         {/* Filters */}
@@ -116,37 +176,43 @@ export default function PapersPage() {
             />
           </div>
 
-          {filtered.length === 0 ? (
-            <div className="card text-center py-10">
-              <BookOpen size={28} className="mx-auto mb-2 text-[var(--text-muted)]" />
-              <p className="text-sm text-[var(--text-secondary)]">No papers found</p>
-            </div>
-          ) : (
-            filtered.map((paper) => (
-              <button
-                key={paper.id}
-                onClick={() => setSelectedPaper(paper)}
-                className={`w-full text-left card hover:border-brand-500/30 transition-all ${
-                  selectedPaper?.id === paper.id ? 'border-brand-500/50 bg-brand-600/5' : ''
-                }`}
-              >
-                <p className="text-sm font-medium text-[var(--text-primary)] leading-snug line-clamp-2 mb-2">
-                  {paper.title}
-                </p>
-                <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
-                  <span className="flex items-center gap-1">
-                    <Calendar size={10} /> {paper.year || 'N/A'}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Star size={10} /> {paper.citations}
-                  </span>
-                  <span className={paper.source === 'arxiv' ? 'badge-blue' : 'badge-purple'}>
-                    {paper.source}
-                  </span>
-                </div>
-              </button>
-            ))
-          )}
+                {filtered.length === 0 ? (
+              <div className="card text-center py-10">
+                <BookOpen size={28} className="mx-auto mb-2 text-[var(--text-muted)]" />
+                <p className="text-sm text-[var(--text-secondary)]">No papers found</p>
+              </div>
+            ) : (
+              filtered.map((paper) => (
+                <button
+                  key={paper.id}
+                  onClick={() => {
+                    setSelectedPaper(paper);
+                    fetchFullText(paper);
+                  }}
+                  className={`w-full text-left card hover:border-brand-500/30 transition-all ${
+                    selectedPaper?.id === paper.id ? 'border-brand-500/50 bg-brand-600/5' : ''
+                  }`}
+                >
+                  <p className="text-sm font-medium text-[var(--text-primary)] leading-snug mb-2">
+                    {paper.title}
+                  </p>
+                  <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
+                    <span className="flex items-center gap-1">
+                      <Calendar size={10} /> {paper.year || 'N/A'}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Star size={10} /> {paper.citations}
+                    </span>
+                    <span className={paper.source === 'arxiv' ? 'badge-blue' : 'badge-purple'}>
+                      {paper.source}
+                    </span>
+                    {paper.full_text && (
+                      <span className="badge-green text-[10px]">Full Text</span>
+                    )}
+                  </div>
+                </button>
+              ))
+            )}
         </div>
 
         {/* Paper Detail */}
@@ -185,15 +251,51 @@ export default function PapersPage() {
                   <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{selectedPaper.abstract}</p>
                 </div>
 
-                {selectedPaper.url && (
-                  <a
-                    href={selectedPaper.url}
-                    target="_blank"
-                    className="btn-secondary text-xs"
+                {/* Full Text Section */}
+                <div>
+                  <button
+                    onClick={() => setShowFullText(!showFullText)}
+                    className="flex items-center gap-1 text-xs font-medium text-[var(--text-muted)] mb-1 hover:text-[var(--text-primary)] transition-colors"
                   >
-                    <ExternalLink size={12} /> View Paper
-                  </a>
-                )}
+                    <FileText size={10} />
+                    Full Text {showFullText ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                    {selectedPaper.full_text ? (
+                      <span className="badge-green text-[10px]">Available</span>
+                    ) : (
+                      <span className="badge-yellow text-[10px]">Not fetched</span>
+                    )}
+                  </button>
+                  {showFullText && (
+                    <div className="max-h-[400px] overflow-y-auto p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border)]">
+                      <pre className="text-xs text-[var(--text-secondary)] whitespace-pre-wrap leading-relaxed">
+                        {selectedPaper.full_text || selectedPaper.abstract}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  {selectedPaper.url && (
+                    <a
+                      href={selectedPaper.url}
+                      target="_blank"
+                      className="btn-secondary text-xs"
+                    >
+                      <ExternalLink size={12} /> View Paper
+                    </a>
+                  )}
+                  {selectedPaper.full_text && (
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(selectedPaper.full_text);
+                        alert('Full text copied to clipboard!');
+                      }}
+                      className="btn-secondary text-xs"
+                    >
+                      <FileText size={12} /> Copy Full Text
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>

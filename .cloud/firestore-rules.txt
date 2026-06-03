@@ -1,0 +1,131 @@
+"""
+Firestore Security Rules & Configuration
+Copy these rules to Firebase Console > Firestore > Rules
+"""
+
+# ============================================================================
+# FIRESTORE SECURITY RULES
+# ============================================================================
+# Location: Firebase Console > Firestore > Rules
+# Deploy via: gcloud firestore indexes composite create --config=firestore.indexes.yaml
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ========================================================================
+    // USERS COLLECTION
+    // ========================================================================
+    match /users/{userId} {
+      // Users can only read/write their own documents
+      allow read, write: if request.auth.uid == userId;
+      
+      // User settings subcollection
+      match /settings/{document=**} {
+        allow read, write: if request.auth.uid == userId;
+      }
+    }
+    
+    // ========================================================================
+    // PROJECTS COLLECTION (owned by users)
+    // ========================================================================
+    match /projects/{projectId} {
+      // Project owner can read/write
+      allow read, write: if resource.data.user_id == request.auth.uid;
+      
+      // Create new projects
+      allow create: if request.auth != null && 
+                       request.resource.data.user_id == request.auth.uid;
+      
+      // Subcollections (papers, gaps, ideas, etc)
+      match /{document=**} {
+        allow read, write: if get(/databases/$(database)/documents/projects/$(projectId)).data.user_id == request.auth.uid;
+      }
+    }
+    
+    // ========================================================================
+    // PAPERS COLLECTION (linked to projects)
+    // ========================================================================
+    match /papers/{paperId} {
+      // User can access if they own the project
+      allow read, write: if get(/databases/$(database)/documents/projects/$(resource.data.project_id)).data.user_id == request.auth.uid;
+      
+      // Metadata subcollection
+      match /metadata/{document=**} {
+        allow read, write: if get(/databases/$(database)/documents/projects/$(resource.data.project_id)).data.user_id == request.auth.uid;
+      }
+    }
+    
+    // ========================================================================
+    // SYSTEM COLLECTIONS (read-only for authenticated users)
+    // ========================================================================
+    match /system/{document=**} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    
+    // Deny all by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+# ============================================================================
+# FIRESTORE INDEXES (Composite)
+# ============================================================================
+# Deploy via: gcloud firestore indexes composite create --config=firestore.indexes.yaml
+
+indexes:
+  - collectionGroup: projects
+    queryScope: COLLECTION
+    fields:
+      - fieldPath: user_id
+        order: ASCENDING
+      - fieldPath: created_at
+        order: DESCENDING
+  
+  - collectionGroup: papers
+    queryScope: COLLECTION
+    fields:
+      - fieldPath: project_id
+        order: ASCENDING
+      - fieldPath: added_at
+        order: DESCENDING
+  
+  - collectionGroup: projects
+    queryScope: COLLECTION
+    fields:
+      - fieldPath: user_id
+        order: ASCENDING
+      - fieldPath: status
+        order: ASCENDING
+      - fieldPath: updated_at
+        order: DESCENDING
+
+# ============================================================================
+# FIRESTORE TTL (Auto-delete old documents)
+# ============================================================================
+# Enable TTL on 'expire_at' field for:
+# - Temporary caches (expire in 90 days)
+# - Session tokens
+# - Temporary uploads
+
+# Configure in Firebase Console:
+# 1. Go to Firestore > Data > Collection
+# 2. Click menu on collection
+# 3. Enable TTL policy on 'expire_at' field
+
+# ============================================================================
+# FIRESTORE BACKUP SETTINGS
+# ============================================================================
+# Automated daily backups to Cloud Storage
+# Configure in Firebase Console:
+# 1. Firestore > Backups > Create Backup Schedule
+# 2. Backup retention: 7-90 days
+# 3. Backup frequency: Daily
+
+# OR via Cloud Backup and Disaster Recovery (Backup-dr):
+# gcloud backup-dr management-servers create \
+#   --backup-vault=firestore-backups \
+#   --location=asia-south1

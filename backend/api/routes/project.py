@@ -81,6 +81,34 @@ async def update_stage(
     return {"message": "Stage updated", "stage": body.stage}
 
 
+@router.get("/{project_id}/papers/{paper_id}/full-text")
+async def get_paper_full_text(
+    project_id: str,
+    paper_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get full text of a paper from cache."""
+    from models.project import PaperCache
+    
+    project = _get_project_or_404(project_id, current_user.id, db)
+    
+    paper = (
+        db.query(PaperCache)
+        .filter(PaperCache.project_id == project_id, PaperCache.external_id == paper_id)
+        .first()
+    )
+    
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    
+    return {
+        "paper_id": paper.external_id,
+        "title": paper.title,
+        "full_text": paper.full_text or paper.abstract or "No full text available",
+    }
+
+
 @router.delete("/{project_id}")
 async def delete_project(
     project_id: str,

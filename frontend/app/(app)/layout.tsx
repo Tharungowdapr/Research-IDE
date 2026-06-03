@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { useAuthStore } from '@/store/useAuthStore';
+import ErrorToast from '@/components/ErrorToast';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -29,6 +30,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <main className="ml-60 flex-1 min-h-screen overflow-auto">
         {children}
       </main>
+      <ErrorToast />
     </div>
   );
 }

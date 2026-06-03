@@ -6,6 +6,7 @@ import {
   Search, ArrowRight, Loader2, AlertCircle, TrendingUp, Lightbulb,
 } from 'lucide-react';
 import { projectsAPI, agentsAPI } from '@/services/api';
+import { showToast } from '@/components/ErrorToast';
 
 const TYPE_COLORS: Record<string, string> = {
   methodological: 'badge-purple',
@@ -29,13 +30,56 @@ export default function GapsPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
+  const [progress, setProgress] = useState('');
 
   useEffect(() => {
-    projectsAPI.get(id).then((p) => {
-      setGaps(p.outputs?.gaps?.gaps || []);
-      setLoading(false);
-    });
+    const fetchProject = async () => {
+      try {
+        const p = await projectsAPI.get(id);
+        setGaps(p.outputs?.gaps?.gaps || []);
+        // Check if gap analysis is in progress
+        if (p.current_stage === 'papers' && !p.outputs?.gaps) {
+          setProgress('Analyzing papers for research gaps...');
+          // Poll for completion
+          const interval = setInterval(async () => {
+            const updated = await projectsAPI.get(id);
+            if (updated.outputs?.gaps?.gaps) {
+              setGaps(updated.outputs.gaps.gaps);
+              setProgress('');
+              clearInterval(interval);
+            }
+          }, 3000);
+          return () => clearInterval(interval);
+        }
+      } catch (e) {
+        setError('Failed to load project');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProject();
   }, [id]);
+
+  const handleAnalyzeGaps = async (retry: boolean = false) => {
+    setGenerating(true);
+    setError('');
+    if (retry) {
+      showToast('Retrying gap analysis...', 'info');
+    }
+    try {
+      await agentsAPI.analyzeGaps(id);
+      router.push(`/projects/${id}/gaps`);
+    } catch (e: any) {
+      const errorMsg = e.response?.data?.detail || 'Gap analysis failed.';
+      setError(errorMsg);
+      showToast(errorMsg, 'error');
+      setGenerating(false);
+    }
+  };
+
+  const handleRetry = () => {
+    handleAnalyzeGaps(true);
+  };
 
   const handleGenerateIdeas = async () => {
     setGenerating(true);
@@ -49,7 +93,12 @@ export default function GapsPage() {
     }
   };
 
-  if (loading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-brand-400" /></div>;
+  if (loading) return (
+    <div className="p-8 flex flex-col items-center gap-4">
+      <Loader2 className="animate-spin text-brand-400" size={32} />
+      {progress && <p className="text-sm text-[var(--text-muted)]">{progress}</p>}
+    </div>
+  );
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
@@ -65,8 +114,17 @@ export default function GapsPage() {
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400 flex items-center gap-2">
-          <AlertCircle size={14} /> {error}
+        <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertCircle size={14} /> 
+            <span>{error}</span>
+          </div>
+          <button 
+            onClick={handleRetry}
+            className="text-xs underline hover:no-underline"
+          >
+            Retry
+          </button>
         </div>
       )}
 
@@ -95,6 +153,9 @@ export default function GapsPage() {
                       <TrendingUp size={10} className="text-brand-400" />
                       Novelty potential: {gap.novelty_potential}/10
                     </span>
+                    {gap.from_full_text && (
+                      <span className="badge-green text-[10px]">Full Text Analyzed</span>
+                    )}
                   </div>
                 </div>
               </div>

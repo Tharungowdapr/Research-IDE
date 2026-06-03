@@ -29,5 +29,9 @@ class User(Base):
     preferred_model = Column(String, default="llama3.2")
     ollama_base_url = Column(String, default="http://localhost:11434")
 
+    # Encrypted Zotero API key
+    zotero_key_encrypted = Column(String, nullable=True)
+    zotero_user_id = Column(String, nullable=True)
+
     def __repr__(self):
         return f"<User id={self.id} email={self.email}>"

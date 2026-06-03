@@ -4,6 +4,8 @@ Agent Routes: Gap Analysis, Idea Generation, Planning, Code, Report, Downloads, 
 
 import io
 import json as json_lib
+import re
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -20,6 +22,8 @@ from agents.idea_generator.idea_agent import run_idea_generation
 from agents.planner.planner_agent import run_planning, run_planning_stream
 from agents.code_agent.code_agent import run_code_generation, run_code_generation_stream
 from agents.writer.writer_agent import run_report_generation
+from agents.literature_review_agent import generate_literature_review as _generate_literature_review, generate_annotated_bibliography as _generate_annotated_bibliography
+from services.citation_service import build_citation_graph
 
 router = APIRouter()
 
@@ -44,7 +48,7 @@ async def analyze_gaps(
     llm = build_llm_client_for_user(current_user)
 
     try:
-        gaps = await run_gap_analysis(papers_data.get("papers", []), intent, llm)
+        gaps = await run_gap_analysis(papers_data.get("papers", []), intent, llm, db=db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Gap analysis failed: {str(e)}")
 
@@ -154,32 +158,41 @@ async def create_plan_stream(
     async def event_generator():
         try:
             full_content = ""
-            async for chunk in run_planning_stream(selected.get("idea", {}), intent, llm, papers=papers_list):
-                full_content += chunk
-                # We yield the chunk as JSON. The frontend will reconstruct the string.
-                yield f"data: {json_lib.dumps({'chunk': chunk})}\n\n"
+            try:
+                async for chunk in run_planning_stream(selected.get("idea", {}), intent, llm, papers=papers_list):
+                    full_content += chunk
+                    yield f"data: {json_lib.dumps({'chunk': chunk})}\n\n"
+            except Exception as stream_err:
+                logging.warning(f"Streaming failed, falling back to non-streaming: {stream_err}")
+                # Fallback: use non-streaming planning
+                try:
+                    from agents.planner.planner_agent import run_planning
+                    plan = await run_planning(selected.get("idea", {}), intent, llm, papers=papers_list)
+                    full_content = json_lib.dumps(plan)
+                    yield f"data: {json_lib.dumps({'chunk': json_lib.dumps(plan)})}\n\n"
+                except Exception as fallback_err:
+                    yield f"data: {json_lib.dumps({'error': f'Planning failed: {str(fallback_err)}'})}\n\n"
+                    yield "data: [DONE]\n\n"
+                    return
             
             # When done, try to parse the full content to save to DB
-            try:
-                import json
-                import re
-                
-                # Simple regex to find the first '{' and last '}'
-                content_to_parse = full_content.strip()
-                match = re.search(r'\{.*\}', content_to_parse, re.DOTALL)
-                if match:
-                    content_to_parse = match.group(0)
-                    
-                parsed_plan = json.loads(content_to_parse)
-                _save_output(db, project.id, "plan", parsed_plan)
-                project.current_stage = "code"
-                db.commit()
-            except Exception as e:
-                import logging
-                logging.error(f"Failed to parse streamed plan: {e}")
+            if full_content:
+                try:
+                    content_to_parse = full_content.strip()
+                    match = re.search(r'\{.*\}', content_to_parse, re.DOTALL)
+                    if match:
+                        content_to_parse = match.group(0)
+                        
+                    parsed_plan = json_lib.loads(content_to_parse)
+                    _save_output(db, project.id, "plan", parsed_plan)
+                    project.current_stage = "code"
+                    db.commit()
+                except Exception as e:
+                    logging.error(f"Failed to parse streamed plan: {e}")
                 
             yield "data: [DONE]\n\n"
         except Exception as e:
+            logging.error(f"Planning streaming error: {e}")
             yield f"data: {json_lib.dumps({'error': str(e)})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
@@ -233,29 +246,40 @@ async def generate_code_stream(
     async def event_generator():
         try:
             full_content = ""
-            async for chunk in run_code_generation_stream(selected.get("idea", {}), plan, llm, file_hints=file_hints, papers=papers_list):
-                full_content += chunk
-                yield f"data: {json_lib.dumps({'chunk': chunk})}\n\n"
+            try:
+                async for chunk in run_code_generation_stream(selected.get("idea", {}), plan, llm, file_hints=file_hints, papers=papers_list):
+                    full_content += chunk
+                    yield f"data: {json_lib.dumps({'chunk': chunk})}\n\n"
+            except Exception as stream_err:
+                logging.warning(f"Code streaming failed, falling back to non-streaming: {stream_err}")
+                # Fallback: use non-streaming code generation
+                try:
+                    code = await run_code_generation(selected.get("idea", {}), plan, llm, file_hints=file_hints, papers=papers_list)
+                    full_content = json_lib.dumps(code)
+                    yield f"data: {json_lib.dumps({'chunk': json_lib.dumps(code)})}\n\n"
+                except Exception as fallback_err:
+                    yield f"data: {json_lib.dumps({'error': f'Code generation failed: {str(fallback_err)}'})}\n\n"
+                    yield "data: [DONE]\n\n"
+                    return
                 
             # When done, try to parse
-            try:
-                import json
-                
-                content_to_parse = full_content.strip()
-                match = re.search(r'\{.*\}', content_to_parse, re.DOTALL)
-                if match:
-                    content_to_parse = match.group(0)
-                    
-                parsed_code = json.loads(content_to_parse)
-                _save_output(db, project.id, "code", parsed_code)
-                project.current_stage = "report"
-                db.commit()
-            except Exception as e:
-                import logging
-                logging.error(f"Failed to parse streamed code: {e}")
+            if full_content:
+                try:
+                    content_to_parse = full_content.strip()
+                    match = re.search(r'\{.*\}', content_to_parse, re.DOTALL)
+                    if match:
+                        content_to_parse = match.group(0)
+                        
+                    parsed_code = json_lib.loads(content_to_parse)
+                    _save_output(db, project.id, "code", parsed_code)
+                    project.current_stage = "report"
+                    db.commit()
+                except Exception as parse_err:
+                    logging.error(f"Failed to parse streamed code: {parse_err}")
 
             yield "data: [DONE]\n\n"
         except Exception as e:
+            logging.error(f"Code streaming error: {e}")
             yield f"data: {json_lib.dumps({'error': str(e)})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
@@ -330,6 +354,80 @@ def _get_output(db: Session, project_id: str, output_type: str):
         Output.output_type == output_type
     ).first()
     return o.data if o else None
+
+
+# ── Literature Review ────────────────────────────────────────────
+
+@router.post("/{project_id}/literature-review")
+async def literature_review_route(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Generate automated literature review for project papers."""
+    project = _get_project(project_id, current_user.id, db)
+    papers_data = _get_output(db, project_id, "papers")
+    intent = _get_output(db, project_id, "intent")
+    
+    if not papers_data or not papers_data.get("papers"):
+        raise HTTPException(status_code=400, detail="No papers found for this project")
+    
+    try:
+        llm = build_llm_client_for_user(current_user)
+        review = await _generate_literature_review(
+            papers_data.get("papers", []),
+            intent or {},
+            llm
+        )
+        return review
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Literature review generation failed: {str(e)}")
+
+
+@router.post("/{project_id}/annotated-bibliography")
+async def annotated_bibliography_route(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Generate annotated bibliography for project papers."""
+    project = _get_project(project_id, current_user.id, db)
+    papers_data = _get_output(db, project_id, "papers")
+    
+    if not papers_data or not papers_data.get("papers"):
+        raise HTTPException(status_code=400, detail="No papers found for this project")
+    
+    try:
+        llm = build_llm_client_for_user(current_user)
+        annotations = await _generate_annotated_bibliography(
+            papers_data.get("papers", []),
+            llm
+        )
+        return {"annotations": annotations}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Bibliography generation failed: {str(e)}")
+
+
+# ── Citation Graph ────────────────────────────────────────────
+
+@router.get("/{project_id}/citation-graph")
+async def get_citation_graph(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Build and return citation graph for the project's papers."""
+    project = _get_project(project_id, current_user.id, db)
+    papers_data = _get_output(db, project_id, "papers")
+    
+    if not papers_data or not papers_data.get("papers"):
+        raise HTTPException(status_code=400, detail="No papers found for this project")
+    
+    try:
+        graph = await build_citation_graph(papers_data.get("papers", []))
+        return graph
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Citation graph generation failed: {str(e)}")
 
 
 # ── Download Endpoints ────────────────────────────────────────────────────────

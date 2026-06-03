@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 import uvicorn
 import time
 
-from api.routes import auth, project, pipeline, agents, llm_config, export
+from api.routes import auth, project, pipeline, agents, llm_config, export, zotero, plugins
 from core.database import Base, engine
 from core.config import settings
 
@@ -57,6 +57,8 @@ app.include_router(pipeline.router, prefix="/api/pipeline", tags=["NLP Pipeline"
 app.include_router(agents.router, prefix="/api/agents", tags=["Agents"])
 app.include_router(llm_config.router, prefix="/api/llm", tags=["LLM Configuration"])
 app.include_router(export.router, prefix="/api/export", tags=["Export"])
+app.include_router(zotero.router, prefix="/api/zotero", tags=["Zotero Integration"])
+app.include_router(plugins.router, prefix="/api/plugins", tags=["Plugin System"])
 
 @app.get("/api/health", tags=["Health"])
 async def health_check():

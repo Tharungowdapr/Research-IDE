@@ -48,33 +48,40 @@ class UpdateProfileRequest(BaseModel):
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterRequest, db: Session = Depends(get_db)):
-    # Check email uniqueness
-    if db.query(User).filter(User.email == body.email).first():
-        raise HTTPException(status_code=400, detail="Email already registered")
+    try:
+        # Check email uniqueness
+        if db.query(User).filter(User.email == body.email).first():
+            raise HTTPException(status_code=400, detail="Email already registered")
 
-    # Validate password strength
-    if len(body.password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+        # Validate password strength
+        if len(body.password) < 8:
+            raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
 
-    user = User(
-        email=body.email,
-        password_hash=hash_password(body.password),
-        name=body.name,
-        skill_level=body.skill_level,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+        user = User(
+            email=body.email,
+            password_hash=hash_password(body.password),
+            name=body.name,
+            skill_level=body.skill_level,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
 
-    access_token = create_access_token({"sub": user.id})
-    refresh_token = create_refresh_token({"sub": user.id})
+        access_token = create_access_token({"sub": user.id})
+        refresh_token = create_refresh_token({"sub": user.id})
 
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
-        "user": _user_response(user),
-    }
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "user": _user_response(user),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"Registration error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
 
 
 @router.post("/login")

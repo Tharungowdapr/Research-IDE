@@ -45,6 +45,7 @@ export default function LLMSettingsPage() {
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
   const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [activeProvider, setActiveProvider] = useState<string | null>(null);
 
   // Per-provider state
@@ -67,6 +68,7 @@ export default function LLMSettingsPage() {
 
   const loadData = async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const [providersData, statusData] = await Promise.all([
         llmAPI.listProviders(),
@@ -80,8 +82,9 @@ export default function LLMSettingsPage() {
 
       // Load Ollama models
       loadOllamaModels(statusData.ollama_base_url || 'http://localhost:11434');
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      setLoadError(e?.message || 'Could not connect to backend. Make sure the server is running on port 8000.');
     } finally {
       setLoading(false);
     }
@@ -284,6 +287,25 @@ export default function LLMSettingsPage() {
           )}
         </div>
       </div>
+
+      {loadError && (
+        <div className="mb-6 rounded-xl border border-red-500/20 bg-red-500/5 p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 flex-shrink-0 mt-0.5">
+              <X size={14} className="text-red-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-red-400 mb-1">Connection Error</p>
+              <p className="text-xs text-red-300/80 mb-3">{loadError}</p>
+              <div className="flex gap-2">
+                <button onClick={loadData} className="btn-primary text-xs">
+                  <RefreshCw size={12} /> Retry
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Provider Cards */}
       <h2 className="font-semibold text-[var(--text-primary)] mb-4">API Key Management</h2>

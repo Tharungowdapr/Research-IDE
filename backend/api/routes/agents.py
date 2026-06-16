@@ -23,6 +23,9 @@ from agents.planner.planner_agent import run_planning, run_planning_stream
 from agents.code_agent.code_agent import run_code_generation, run_code_generation_stream
 from agents.writer.writer_agent import run_report_generation
 from agents.literature_review_agent import generate_literature_review as _generate_literature_review, generate_annotated_bibliography as _generate_annotated_bibliography
+from agents.guide_agent import run_guide_generation
+from agents.presentation_agent import run_presentation_generation
+from agents.chat_agent import run_chat, run_chat_stream
 from services.citation_service import build_citation_graph
 
 router = APIRouter()
@@ -489,3 +492,187 @@ async def download_pdf(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+
+
+# ── Guide Generation ──────────────────────────────────────────────────────────
+
+class GuideRequest(BaseModel):
+    project_id: str
+
+
+@router.post("/generate-guide")
+async def generate_guide(
+    body: GuideRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Generate a comprehensive research guide."""
+    project, papers_data, intent = _load_project_context(body.project_id, current_user.id, db)
+    selected = _get_output(db, project.id, "selected_idea")
+    gaps = _get_output(db, project.id, "gaps") or {"gaps": []}
+    plan = _get_output(db, project.id, "plan") or {}
+    if not selected:
+        raise HTTPException(status_code=400, detail="Select an idea first")
+
+    llm = build_llm_client_for_user(current_user)
+    idea = selected.get("idea", {})
+
+    try:
+        guide = await run_guide_generation(
+            idea,
+            papers_data.get("papers", []),
+            gaps.get("gaps", []),
+            plan,
+            intent,
+            llm,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Guide generation failed: {str(e)}")
+
+    _save_output(db, project.id, "guide", guide)
+    project.current_stage = "guide"
+    db.commit()
+
+    return {"project_id": project.id, "guide": guide}
+
+
+# ── Presentation Generation ───────────────────────────────────────────────────
+
+class PresentationRequest(BaseModel):
+    project_id: str
+
+
+@router.post("/generate-presentation")
+async def generate_presentation(
+    body: PresentationRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Generate presentation slides from research context."""
+    project, papers_data, intent = _load_project_context(body.project_id, current_user.id, db)
+    selected = _get_output(db, project.id, "selected_idea")
+    guide = _get_output(db, project.id, "guide") or {}
+    if not selected:
+        raise HTTPException(status_code=400, detail="Select an idea first")
+
+    llm = build_llm_client_for_user(current_user)
+    idea = selected.get("idea", {})
+
+    try:
+        presentation = await run_presentation_generation(
+            guide,
+            idea,
+            papers_data.get("papers", []),
+            intent,
+            llm,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Presentation generation failed: {str(e)}")
+
+    _save_output(db, project.id, "presentation", presentation)
+    return {"project_id": project.id, "slides": presentation.get("slides", [])}
+
+
+# ── Chat (Non-Streaming) ──────────────────────────────────────────────────────
+
+class ChatRequest(BaseModel):
+    project_id: str
+    question: str
+    conversation_history: list = []
+
+
+@router.post("/chat")
+async def chat(
+    body: ChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Non-streaming chat with research assistant."""
+    project = _get_project(body.project_id, current_user.id, db)
+
+    project_context = {
+        "intent": _get_output(db, project.id, "intent") or {},
+        "papers": _get_output(db, project.id, "papers") or {},
+        "gaps": _get_output(db, project.id, "gaps") or {},
+        "ideas": _get_output(db, project.id, "ideas") or {},
+        "selected_idea": _get_output(db, project.id, "selected_idea") or {},
+        "plan": _get_output(db, project.id, "plan") or {},
+        "report": _get_output(db, project.id, "report") or {},
+    }
+
+    llm = build_llm_client_for_user(current_user)
+
+    try:
+        response = await run_chat(
+            body.question,
+            body.conversation_history,
+            project_context,
+            llm,
+        )
+        return {"response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
+
+
+# ── Chat (Streaming SSE) ──────────────────────────────────────────────────────
+
+@router.post("/chat/stream")
+async def chat_stream(
+    body: ChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Streaming chat with research assistant using SSE."""
+    project = _get_project(body.project_id, current_user.id, db)
+
+    project_context = {
+        "intent": _get_output(db, project.id, "intent") or {},
+        "papers": _get_output(db, project.id, "papers") or {},
+        "gaps": _get_output(db, project.id, "gaps") or {},
+        "ideas": _get_output(db, project.id, "ideas") or {},
+        "selected_idea": _get_output(db, project.id, "selected_idea") or {},
+        "plan": _get_output(db, project.id, "plan") or {},
+        "report": _get_output(db, project.id, "report") or {},
+    }
+
+    llm = build_llm_client_for_user(current_user)
+
+    async def event_generator():
+        try:
+            async for chunk in run_chat_stream(
+                body.question,
+                body.conversation_history,
+                project_context,
+                llm,
+            ):
+                yield f"data: {json_lib.dumps({'chunk': chunk})}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            logging.error(f"Chat streaming error: {e}")
+            yield f"data: {json_lib.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+# ── PPTX Download ─────────────────────────────────────────────────────────────
+
+@router.get("/{project_id}/download/pptx")
+async def download_pptx(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Generate and download presentation as PPTX."""
+    _get_project(project_id, current_user.id, db)
+    presentation = _get_output(db, project_id, "presentation")
+    if not presentation:
+        raise HTTPException(status_code=400, detail="Generate the presentation first")
+
+    from services.export_service import generate_pptx
+    pptx_bytes = generate_pptx(presentation)
+
+    return StreamingResponse(
+        io.BytesIO(pptx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        headers={"Content-Disposition": "attachment; filename=presentation.pptx"},
+    )

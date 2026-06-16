@@ -221,6 +221,83 @@ body {{ font-family: 'Times New Roman', Times, serif; font-size: 10pt; line-heig
 </div></body></html>"""
 
 
+def generate_pptx(presentation: dict) -> bytes:
+    """Generate PPTX from presentation slide data."""
+    try:
+        from pptx import Presentation
+        from pptx.util import Inches, Pt
+        from pptx.dml.color import RGBColor
+        from pptx.enum.text import PP_ALIGN
+    except ImportError:
+        raise ImportError("python-pptx is required. Install with: pip install python-pptx")
+
+    prs = Presentation()
+    prs.slide_width = Inches(13.333)
+    prs.slide_height = Inches(7.5)
+
+    slides_data = presentation.get("slides", [])
+
+    for i, slide_data in enumerate(slides_data):
+        if i == 0:
+            layout = prs.slide_layouts[6]
+        else:
+            layout = prs.slide_layouts[1]
+        slide = prs.slides.add_slide(layout)
+
+        bg = slide.background
+        fill = bg.fill
+        fill.solid()
+        fill.fore_color.rgb = RGBColor(0x0A, 0x0A, 0x0F)
+
+        title = slide_data.get("title", "")
+        subtitle = slide_data.get("subtitle", "")
+        bullets = slide_data.get("bullets", [])
+
+        # Title
+        txBox = slide.shapes.add_textbox(Inches(0.8), Inches(0.5), Inches(11.7), Inches(1.0))
+        tf = txBox.text_frame
+        tf.word_wrap = True
+        p = tf.paragraphs[0]
+        p.text = title
+        p.font.size = Pt(36)
+        p.font.bold = True
+        p.font.color.rgb = RGBColor(0xE8, 0xE8, 0xF0)
+
+        if subtitle:
+            txBox2 = slide.shapes.add_textbox(Inches(0.8), Inches(1.4), Inches(11.7), Inches(0.6))
+            tf2 = txBox2.text_frame
+            p2 = tf2.paragraphs[0]
+            p2.text = subtitle
+            p2.font.size = Pt(18)
+            p2.font.color.rgb = RGBColor(0x88, 0x88, 0xA8)
+
+        # Bullets
+        if bullets:
+            txBox3 = slide.shapes.add_textbox(Inches(0.8), Inches(2.2), Inches(11.7), Inches(4.5))
+            tf3 = txBox3.text_frame
+            tf3.word_wrap = True
+            for j, bullet in enumerate(bullets):
+                if j == 0:
+                    p3 = tf3.paragraphs[0]
+                else:
+                    p3 = tf3.add_paragraph()
+                p3.text = f"•  {bullet}"
+                p3.font.size = Pt(16)
+                p3.font.color.rgb = RGBColor(0x88, 0x88, 0xA8)
+                p3.space_after = Pt(8)
+
+        # Notes
+        notes_text = slide_data.get("notes", "")
+        if notes_text:
+            notes_slide = slide.notes_slide
+            notes_slide.notes_text_frame.text = notes_text
+
+    buf = io.BytesIO()
+    prs.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
+
+
 def _esc(text: str) -> str:
     """Escape HTML entities."""
     return (text.replace("&", "&amp;").replace("<", "&lt;")

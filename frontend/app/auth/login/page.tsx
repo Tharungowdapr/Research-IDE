@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Brain, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Brain, Eye, EyeOff, Loader2, Sparkles, ArrowRight } from 'lucide-react';
 import { authAPI } from '@/services/api';
 import { useAuthStore } from '@/store/useAuthStore';
 
@@ -36,21 +36,25 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)] p-4">
-      <div className="w-full max-w-md">
-        {/* Logo */}
+    <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)] p-4 relative overflow-hidden">
+      <div className="absolute inset-0 bg-mesh" />
+      <div className="absolute top-1/3 left-1/4 w-72 h-72 bg-brand-500/10 rounded-full blur-[128px]" />
+      <div className="absolute bottom-1/3 right-1/4 w-72 h-72 bg-purple-500/10 rounded-full blur-[128px]" />
+
+      <div className="relative z-10 w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 mb-3">
-            <Brain size={24} className="text-white" />
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-600 shadow-lg shadow-brand-600/20 mb-4">
+            <Brain size={28} className="text-white" />
           </div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">Welcome back</h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1">Sign in to ResearchIDE</p>
         </div>
 
-        <div className="card">
+        <div className="card border-[var(--border-light)]">
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">
+              <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
                 {error}
               </div>
             )}
@@ -94,17 +98,22 @@ export default function LoginPage() {
             </div>
 
             <button type="submit" className="btn-primary w-full justify-center" disabled={loading}>
-              {loading ? <Loader2 size={14} className="animate-spin" /> : null}
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? (
+                <><Loader2 size={14} className="animate-spin" /> Signing in...</>
+              ) : (
+                <><Sparkles size={14} /> Sign In</>
+              )}
             </button>
           </form>
 
-          <p className="mt-4 text-center text-xs text-[var(--text-muted)]">
-            Don&apos;t have an account?{' '}
-            <Link href="/auth/register" className="text-brand-400 hover:text-brand-300">
-              Create one
-            </Link>
-          </p>
+          <div className="mt-6 pt-4 border-t border-[var(--border)] text-center">
+            <p className="text-xs text-[var(--text-muted)]">
+              Don&apos;t have an account?{' '}
+              <Link href="/auth/register" className="text-brand-400 hover:text-brand-300 font-medium">
+                Create one <ArrowRight size={10} className="inline" />
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
     </div>

@@ -502,7 +502,7 @@ async def get_ollama_models(base_url: str = "http://localhost:11434") -> list:
         return []
 
 
-def build_llm_client_for_user(user, provider: Optional[str] = None, model: Optional[str] = None) -> LLMClient:
+def build_llm_client_for_user(user, provider: Optional[str] = None, model: Optional[str] = None, max_tokens: Optional[int] = None) -> LLMClient:
     """
     Build an LLMClient using the user's stored preferences and API keys.
     """
@@ -521,4 +521,5 @@ def build_llm_client_for_user(user, provider: Optional[str] = None, model: Optio
         api_key=api_key,
         model=selected_model,
         base_url=user.ollama_base_url if selected_provider == "ollama" else None,
+        max_tokens=max_tokens or 2048,
     )

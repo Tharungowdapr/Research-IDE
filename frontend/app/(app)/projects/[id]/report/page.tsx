@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
-import { FileText, Download, Loader2, BookOpen, Tag, ExternalLink } from 'lucide-react';
+import { FileText, Download, Loader2, BookOpen, Tag, ChevronDown } from 'lucide-react';
 import { projectsAPI, agentsAPI } from '@/services/api';
 import { useAuthStore } from '@/store/useAuthStore';
 
@@ -11,7 +11,9 @@ export default function ReportPage() {
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState(0);
+  const [showToc, setShowToc] = useState(false);
   const [downloading, setDownloading] = useState<'docx' | 'pdf' | 'md' | null>(null);
+  const tocRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     projectsAPI.get(id).then((p) => {
@@ -114,6 +116,17 @@ export default function ReportPage() {
   const sections = report.sections || [];
   const references = report.references || [];
 
+  const tocItems = ['Abstract', ...sections.map((s: any) => s.heading)];
+  if (references.length > 0) tocItems.push('References');
+
+  const scrollToSection = (index: number) => {
+    setActiveSection(index);
+    setShowToc(false);
+    const id = `section-${index}`;
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
     <div className="p-8 max-w-6xl mx-auto">
       <div className="mb-6 flex items-center justify-between">
@@ -144,123 +157,127 @@ export default function ReportPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-12 gap-5">
-        {/* TOC */}
-        <div className="col-span-3">
-          <div className="card sticky top-4">
-            <p className="text-xs font-medium text-[var(--text-muted)] mb-3 flex items-center gap-1">
-              <BookOpen size={11} /> Contents
-            </p>
-            <nav className="space-y-1">
-              {['Abstract', ...sections.map((s: any) => s.heading)].map((heading: string, i: number) => (
+      {/* Compact TOC Dropdown */}
+      <div className="relative mb-4" ref={tocRef}>
+        <button
+          onClick={() => setShowToc(!showToc)}
+          className="card flex items-center gap-2 py-2.5 px-4 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] w-full"
+        >
+          <BookOpen size={13} />
+          <span className="font-medium">Jump to section</span>
+          <span className="text-[var(--text-muted)] mx-1">·</span>
+          <span className="text-[var(--text-muted)]">{tocItems[activeSection]}</span>
+          <ChevronDown
+            size={12}
+            className={`ml-auto transition-transform ${showToc ? 'rotate-180' : ''}`}
+          />
+        </button>
+        {showToc && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setShowToc(false)} />
+            <div className="absolute left-0 right-0 top-full mt-1 z-20 card p-1.5 shadow-xl border border-[var(--border)]">
+              {tocItems.map((heading, i) => (
                 <button
                   key={i}
-                  onClick={() => setActiveSection(i)}
-                  className={`w-full text-left text-xs px-2 py-1.5 rounded-md transition-all ${
+                  onClick={() => scrollToSection(i)}
+                  className={`w-full text-left text-xs px-3 py-2 rounded-md transition-all ${
                     activeSection === i
-                      ? 'bg-brand-600/20 text-brand-400'
-                      : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                      ? 'bg-brand-600/20 text-brand-400 font-medium'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]'
                   }`}
                 >
                   {heading}
                 </button>
               ))}
-              {references.length > 0 && (
-                <button
-                  onClick={() => setActiveSection(sections.length + 1)}
-                  className="w-full text-left text-xs px-2 py-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-                >
-                  References
-                </button>
-              )}
-            </nav>
-          </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Paper Content - Full Width */}
+      <div className="card space-y-6">
+        {/* Title */}
+        <div className="border-b border-[var(--border)] pb-5 text-center" id="section-0">
+          <h2 className="text-xl font-bold text-[var(--text-primary)] leading-snug mb-2">
+            {report.title}
+          </h2>
+          {report.authors?.length > 0 && (
+            <p className="text-sm italic text-[var(--text-secondary)] mb-3">
+              {report.authors.join(', ')}
+            </p>
+          )}
+          {report.keywords?.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 justify-center">
+              {report.keywords.map((kw: string) => (
+                <span key={kw} className="badge-blue flex items-center gap-1">
+                  <Tag size={9} /> {kw}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Paper Content */}
-        <div className="col-span-9">
-          <div className="card space-y-6">
-            {/* Title */}
-            <div className="border-b border-[var(--border)] pb-5 text-center">
-              <h2 className="text-xl font-bold text-[var(--text-primary)] leading-snug mb-2">
-                {report.title}
-              </h2>
-              {report.authors?.length > 0 && (
-                <p className="text-sm italic text-[var(--text-secondary)] mb-3">
-                  {report.authors.join(', ')}
-                </p>
-              )}
-              {report.keywords?.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 justify-center">
-                  {report.keywords.map((kw: string) => (
-                    <span key={kw} className="badge-blue flex items-center gap-1">
-                      <Tag size={9} /> {kw}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Abstract */}
-            <div className="rounded-lg border-l-4 border-brand-500 bg-[var(--bg-secondary)] p-4">
-              <span className="italic text-[var(--text-muted)] text-sm">Abstract — </span>
-              <span className="text-sm text-[var(--text-secondary)] leading-relaxed">{report.abstract}</span>
-            </div>
-
-            {/* Index Terms */}
-            {report.keywords?.length > 0 && (
-              <p className="text-sm">
-                <span className="italic text-[var(--text-muted)]">Index Terms — </span>
-                <span className="text-[var(--text-secondary)]">{report.keywords.join(', ')}</span>
-              </p>
-            )}
-
-            {/* Sections */}
-            {sections.map((section: any, i: number) => (
-              <div key={i} className="border-t border-[var(--border)] pt-5">
-                <h3 className="text-sm font-bold text-[var(--text-primary)] mb-3 text-center uppercase tracking-wide">
-                  {section.heading}
-                </h3>
-                <div className="text-sm text-[var(--text-secondary)] leading-relaxed whitespace-pre-line">
-                  {renderCitationContent(section.content)}
-                </div>
-              </div>
-            ))}
-
-            {/* Acknowledgements */}
-            {report.acknowledgements && (
-              <div className="border-t border-[var(--border)] pt-5">
-                <h3 className="text-sm font-bold text-[var(--text-primary)] mb-3 text-center uppercase tracking-wide">
-                  Acknowledgements
-                </h3>
-                <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{report.acknowledgements}</p>
-              </div>
-            )}
-
-            {/* References */}
-            {references.length > 0 && (
-              <div className="border-t border-[var(--border)] pt-5">
-                <h3 className="text-sm font-bold text-[var(--text-primary)] mb-3 text-center uppercase tracking-wide">
-                  References
-                </h3>
-                <ol className="space-y-2">
-                  {references.map((ref: any, i: number) => (
-                    <li key={i} className="text-xs text-[var(--text-muted)] flex gap-2">
-                      <span className="text-[var(--text-secondary)] font-medium flex-shrink-0">
-                        [{typeof ref === 'object' ? ref.id || i + 1 : i + 1}]
-                      </span>
-                      <span>
-                        {typeof ref === 'object'
-                          ? `${ref.authors}, "${ref.title}," ${ref.venue}, ${ref.year}.`
-                          : ref}
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            )}
-          </div>
+        {/* Abstract */}
+        <div id="section-1" className="rounded-lg border-l-4 border-brand-500 bg-[var(--bg-secondary)] p-4">
+          <span className="italic text-[var(--text-muted)] text-sm">Abstract — </span>
+          <span className="text-sm text-[var(--text-secondary)] leading-relaxed">{report.abstract}</span>
         </div>
+
+        {/* Index Terms */}
+        {report.keywords?.length > 0 && (
+          <p className="text-sm">
+            <span className="italic text-[var(--text-muted)]">Index Terms — </span>
+            <span className="text-[var(--text-secondary)]">{report.keywords.join(', ')}</span>
+          </p>
+        )}
+
+        {/* Sections */}
+        {sections.map((section: any, i: number) => {
+          const sectionIndex = i + 2;
+          return (
+            <div key={i} id={`section-${sectionIndex}`} className="border-t border-[var(--border)] pt-5">
+              <h3 className="text-sm font-bold text-[var(--text-primary)] mb-3 text-center uppercase tracking-wide">
+                {section.heading}
+              </h3>
+              <div className="text-sm text-[var(--text-secondary)] leading-relaxed whitespace-pre-line">
+                {renderCitationContent(section.content)}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Acknowledgements */}
+        {report.acknowledgements && (
+          <div className="border-t border-[var(--border)] pt-5">
+            <h3 className="text-sm font-bold text-[var(--text-primary)] mb-3 text-center uppercase tracking-wide">
+              Acknowledgements
+            </h3>
+            <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{report.acknowledgements}</p>
+          </div>
+        )}
+
+        {/* References */}
+        {references.length > 0 && (
+          <div id={`section-${tocItems.length - 1}`} className="border-t border-[var(--border)] pt-5">
+            <h3 className="text-sm font-bold text-[var(--text-primary)] mb-3 text-center uppercase tracking-wide">
+              References
+            </h3>
+            <ol className="space-y-2">
+              {references.map((ref: any, i: number) => (
+                <li key={i} className="text-xs text-[var(--text-muted)] flex gap-2">
+                  <span className="text-[var(--text-secondary)] font-medium flex-shrink-0">
+                    [{typeof ref === 'object' ? ref.id || i + 1 : i + 1}]
+                  </span>
+                  <span>
+                    {typeof ref === 'object'
+                      ? `${ref.authors}, "${ref.title}," ${ref.venue}, ${ref.year}.`
+                      : ref}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
       </div>
     </div>
   );

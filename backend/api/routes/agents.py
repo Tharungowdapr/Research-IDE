@@ -48,7 +48,7 @@ async def analyze_gaps(
 ):
     """Run gap analysis on retrieved papers."""
     project, papers_data, intent = _load_project_context(body.project_id, current_user.id, db)
-    llm = build_llm_client_for_user(current_user)
+    llm = build_llm_client_for_user(current_user, max_tokens=8192)
 
     try:
         gaps = await run_gap_analysis(papers_data.get("papers", []), intent, llm, db=db)
@@ -129,7 +129,7 @@ async def create_plan(
     if not selected:
         raise HTTPException(status_code=400, detail="Select an idea first")
 
-    llm = build_llm_client_for_user(current_user)
+    llm = build_llm_client_for_user(current_user, max_tokens=8192)
 
     try:
         papers_list = papers_data.get("papers", [])
@@ -155,7 +155,7 @@ async def create_plan_stream(
     if not selected:
         raise HTTPException(status_code=400, detail="Select an idea first")
 
-    llm = build_llm_client_for_user(current_user)
+    llm = build_llm_client_for_user(current_user, max_tokens=8192)
     papers_list = papers_data.get("papers", [])
 
     async def event_generator():

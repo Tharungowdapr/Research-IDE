@@ -291,15 +291,37 @@ def _extract_key_sections(text: str) -> str:
 
 
 def _parse_json_list(raw: str) -> List[Dict]:
+    if not raw or not raw.strip():
+        return []
     clean = re.sub(r"```(?:json)?\s*", "", raw).strip().rstrip("`").strip()
+    # Try direct array parse first
     start = clean.find("[")
     end = clean.rfind("]") + 1
     if start != -1 and end > start:
-        return json.loads(clean[start:end])
-    obj = json.loads(clean)
-    for v in obj.values():
-        if isinstance(v, list):
-            return v
+        try:
+            return json.loads(clean[start:end])
+        except json.JSONDecodeError:
+            pass
+    # Try object with list values
+    try:
+        obj = json.loads(clean)
+        for v in obj.values():
+            if isinstance(v, list):
+                return v
+    except json.JSONDecodeError:
+        pass
+    # Try partial recovery: find innermost complete objects
+    try:
+        cleaned = clean.strip().rstrip(",").rstrip(".").strip()
+        if cleaned.startswith("{"):
+            # Might be truncated — try to find any array within
+            arr_start = cleaned.find("[")
+            arr_end = cleaned.rfind("]")
+            if arr_start != -1 and arr_end > arr_start + 1:
+                partial = cleaned[arr_start:arr_end+1]
+                return json.loads(partial)
+    except (json.JSONDecodeError, Exception):
+        pass
     return []
 
 
@@ -308,30 +330,66 @@ def _extracted_gaps_from_papers(papers: List[Dict]) -> List[Dict]:
     limitation_keywords = ["however", "limitation", "future work", "not considered",
                            "lack of", "insufficient", "limited", "cannot handle", 
                            "drawback", "shortcoming", "gap", "challenge"]
+    type_keywords = {"methodological": ["method", "approach", "technique", "algorithm"],
+                     "dataset": ["dataset", "data", "benchmark", "corpus"],
+                     "evaluation": ["evaluation", "metric", "measure", "assess"],
+                     "application": ["application", "domain", "real-world", "practical"],
+                     "theoretical": ["theory", "theorem", "assumption", "bound"]}
+    category_keywords = {"unexplored_combination": ["combine", "integration", "hybrid"],
+                         "evaluation_gap": ["evaluation", "metric", "benchmark"],
+                         "dataset_gap": ["dataset", "data", "corpus"],
+                         "scalability_gap": ["scalable", "large-scale", "efficiency"],
+                         "theoretical_gap": ["theory", "theoretical", "analysis"]}
+    
     gaps = []
     for paper in papers[:10]:
-        # Use full text if available, otherwise abstract
         text = paper.get("full_text", paper.get("abstract", "")).lower()
+        title = paper.get("title", "Unknown")
+        seen_snippets = set()
+        # Find multiple keyword matches (not just the first)
         for kw in limitation_keywords:
-            if kw in text:
-                idx = text.find(kw)
-                snippet = text[max(0, idx - 50):idx + 200]
-                gaps.append({
-                    "title": f"Gap from: {paper.get('title', 'Unknown')[:50]}",
-                    "description": snippet,
-                    "type": "methodological",
-                    "confidence": "low",
-                    "supporting_papers": [paper.get("title", "")],
-                    "opportunity": "Address the mentioned limitation",
-                    "novelty_potential": 5,
-                    "evidence_strength": "weak",
-                    "gap_category": "evaluation_gap",
-                    "addressability": 7,
-                    "impact": 5,
-                    "final_score": 5.8,
-                })
-                break
-    return gaps[:6] if gaps else _default_gaps()
+            idx = 0
+            while True:
+                idx = text.find(kw, idx)
+                if idx == -1:
+                    break
+                snippet = text[max(0, idx - 60):idx + 250].strip()
+                # Deduplicate by snippet content
+                snippet_key = snippet[:100]
+                if snippet_key not in seen_snippets:
+                    seen_snippets.add(snippet_key)
+                    # Determine type and category from surrounding context
+                    context = text[max(0, idx-100):idx+300]
+                    gap_type = "methodological"
+                    for t, kws in type_keywords.items():
+                        if any(k in context for k in kws):
+                            gap_type = t
+                            break
+                    gap_category = "evaluation_gap"
+                    for c, kws in category_keywords.items():
+                        if any(k in context for k in kws):
+                            gap_category = c
+                            break
+                    has_full_text = bool(paper.get("full_text"))
+                    gaps.append({
+                        "title": f"{kw.title()} in {title[:60]}",
+                        "description": snippet,
+                        "type": gap_type,
+                        "confidence": "low",
+                        "supporting_papers": [title],
+                        "opportunity": f"Investigate the mentioned {kw} to identify research directions",
+                        "novelty_potential": 6,
+                        "evidence_strength": "weak",
+                        "gap_category": gap_category,
+                        "addressability": 7,
+                        "impact": 5,
+                        "final_score": 5.8,
+                        "from_full_text": has_full_text,
+                    })
+                idx += len(kw)
+        # Limit per paper to avoid too many near-duplicates
+        gaps = gaps[:3 * len(papers[:10])]
+    return gaps[:15] if gaps else _default_gaps()
 
 
 def _default_gaps() -> List[Dict]:

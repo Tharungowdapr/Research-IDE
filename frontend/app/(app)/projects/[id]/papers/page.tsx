@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   BookOpen, ExternalLink, Users, Calendar, Star, ArrowRight,
-  Loader2, Search, Filter, AlertCircle, FileText, ChevronDown, ChevronUp,
-  BookMarked, Share2,
+  Loader2, Search, AlertCircle, FileText, ChevronDown, ChevronUp,
+  BookMarked, Share2, Filter,
 } from 'lucide-react';
 import { projectsAPI, agentsAPI, papersAPI } from '@/services/api';
 import { showToast } from '@/components/ErrorToast';
@@ -18,6 +18,7 @@ export default function PapersPage() {
 
   const [papers, setPapers] = useState<any[]>([]);
   const [selectedPaper, setSelectedPaper] = useState<any>(null);
+  const [expandedPaperId, setExpandedPaperId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [search, setSearch] = useState('');
@@ -34,11 +35,11 @@ export default function PapersPage() {
   }, [id]);
 
   const fetchFullText = async (paper: any) => {
-    if (paper.full_text) return; // Already have it
+    if (paper.full_text) return;
     try {
       const data = await papersAPI.getFullText(id, paper.id);
       if (data?.full_text) {
-        setPapers(prev => prev.map(p => 
+        setPapers(prev => prev.map(p =>
           p.id === paper.id ? { ...p, full_text: data.full_text } : p
         ));
         if (selectedPaper?.id === paper.id) {
@@ -68,6 +69,19 @@ export default function PapersPage() {
     }
   };
 
+  const handlePaperClick = (paper: any) => {
+    if (expandedPaperId === paper.id) {
+      setExpandedPaperId(null);
+      setSelectedPaper(null);
+      setShowFullText(false);
+    } else {
+      setExpandedPaperId(paper.id);
+      setSelectedPaper(paper);
+      setShowFullText(false);
+      fetchFullText(paper);
+    }
+  };
+
   const filtered = papers.filter(
     (p) =>
       !search ||
@@ -75,11 +89,14 @@ export default function PapersPage() {
       p.abstract?.toLowerCase().includes(search.toLowerCase())
   );
 
+  const arxivCount = papers.filter(p => p.source === 'arxiv').length;
+  const ssCount = papers.filter(p => p.source === 'semantic_scholar').length;
+
   if (loading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-brand-400" /></div>;
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="p-8 max-w-6xl mx-auto">
+      <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-[var(--text-primary)]">Paper Explorer</h1>
           <p className="text-xs text-[var(--text-muted)] mt-0.5">
@@ -104,7 +121,7 @@ export default function PapersPage() {
 
       {/* Analysis Tools */}
       {papers.length > 0 && (
-        <div className="mb-4 flex items-center gap-2">
+        <div className="mb-3 flex items-center gap-2">
           <button
             onClick={() => { setShowLiteratureReview(!showLiteratureReview); setShowCitationGraph(false); }}
             className={`btn-ghost text-xs flex items-center gap-1.5 ${showLiteratureReview ? 'bg-brand-600/20 text-brand-400' : ''}`}
@@ -121,186 +138,161 @@ export default function PapersPage() {
       )}
 
       {showLiteratureReview && (
-        <div className="mb-5">
+        <div className="mb-4">
           <LiteratureReview projectId={id} />
         </div>
       )}
 
       {showCitationGraph && (
-        <div className="mb-5">
+        <div className="mb-4">
           <CitationGraph projectId={id} />
         </div>
       )}
 
-      {/* 3-Column Layout */}
-      <div className="grid grid-cols-12 gap-5">
-        {/* Filters */}
-        <div className="col-span-2">
-          <div className="card sticky top-4">
-            <p className="text-xs font-medium text-[var(--text-secondary)] mb-3 flex items-center gap-1">
-              <Filter size={11} /> Filters
-            </p>
-            <div className="space-y-3 text-xs text-[var(--text-muted)]">
-              <div>
-                <p className="font-medium text-[var(--text-secondary)] mb-1">Source</p>
-                <div className="space-y-1">
-                  {['arxiv', 'semantic_scholar'].map((src) => {
-                    const count = papers.filter((p) => p.source === src).length;
-                    return (
-                      <div key={src} className="flex justify-between">
-                        <span className="capitalize">{src.replace('_', ' ')}</span>
-                        <span className="badge-blue">{count}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              <div>
-                <p className="font-medium text-[var(--text-secondary)] mb-1">Total</p>
-                <span className="text-brand-400 font-semibold">{papers.length}</span>
-              </div>
-            </div>
-          </div>
+      {/* Filter Bar */}
+      <div className="card mb-4 flex items-center gap-4 py-3 px-4">
+        <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+          <Filter size={12} />
+          <span className="font-medium text-[var(--text-secondary)]">Filters</span>
         </div>
-
-        {/* Paper List */}
-        <div className="col-span-5 space-y-2">
-          <div className="relative mb-3">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-            <input
-              type="text"
-              className="input pl-8 text-xs"
-              placeholder="Search papers..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-
-                {filtered.length === 0 ? (
-              <div className="card text-center py-10">
-                <BookOpen size={28} className="mx-auto mb-2 text-[var(--text-muted)]" />
-                <p className="text-sm text-[var(--text-secondary)]">No papers found</p>
-              </div>
-            ) : (
-              filtered.map((paper) => (
-                <button
-                  key={paper.id}
-                  onClick={() => {
-                    setSelectedPaper(paper);
-                    fetchFullText(paper);
-                  }}
-                  className={`w-full text-left card hover:border-brand-500/30 transition-all ${
-                    selectedPaper?.id === paper.id ? 'border-brand-500/50 bg-brand-600/5' : ''
-                  }`}
-                >
-                  <p className="text-sm font-medium text-[var(--text-primary)] leading-snug mb-2">
-                    {paper.title}
-                  </p>
-                  <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
-                    <span className="flex items-center gap-1">
-                      <Calendar size={10} /> {paper.year || 'N/A'}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Star size={10} /> {paper.citations}
-                    </span>
-                    <span className={paper.source === 'arxiv' ? 'badge-blue' : 'badge-purple'}>
-                      {paper.source}
-                    </span>
-                    {paper.full_text && (
-                      <span className="badge-green text-[10px]">Full Text</span>
-                    )}
-                  </div>
-                </button>
-              ))
-            )}
+        <div className="flex items-center gap-3 text-xs">
+          <span className="flex items-center gap-1.5">
+            <span className="badge-blue">arXiv</span>
+            <span className="text-[var(--text-secondary)] font-medium">{arxivCount}</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="badge-purple">Semantic Scholar</span>
+            <span className="text-[var(--text-secondary)] font-medium">{ssCount}</span>
+          </span>
+          <span className="w-px h-4 bg-[var(--border)]" />
+          <span className="text-[var(--text-muted)]">Total</span>
+          <span className="text-brand-400 font-semibold">{papers.length}</span>
         </div>
-
-        {/* Paper Detail */}
-        <div className="col-span-5">
-          <div className="card sticky top-4">
-            {!selectedPaper ? (
-              <div className="flex flex-col items-center justify-center min-h-[300px] text-center">
-                <BookOpen size={28} className="text-[var(--text-muted)] mb-2" />
-                <p className="text-sm text-[var(--text-secondary)]">Select a paper to view details</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <h3 className="font-semibold text-sm text-[var(--text-primary)] leading-snug">
-                  {selectedPaper.title}
-                </h3>
-
-                <div className="flex flex-wrap gap-2 text-xs text-[var(--text-muted)]">
-                  <span className="flex items-center gap-1"><Calendar size={10} /> {selectedPaper.year}</span>
-                  <span className="flex items-center gap-1"><Star size={10} /> {selectedPaper.citations} citations</span>
-                  <span className={selectedPaper.source === 'arxiv' ? 'badge-blue' : 'badge-purple'}>
-                    {selectedPaper.source}
-                  </span>
-                </div>
-
-                {selectedPaper.authors?.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-[var(--text-muted)] mb-1 flex items-center gap-1">
-                      <Users size={10} /> Authors
-                    </p>
-                    <p className="text-xs text-[var(--text-secondary)]">{selectedPaper.authors.join(', ')}</p>
-                  </div>
-                )}
-
-                <div>
-                  <p className="text-xs font-medium text-[var(--text-muted)] mb-1">Abstract</p>
-                  <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{selectedPaper.abstract}</p>
-                </div>
-
-                {/* Full Text Section */}
-                <div>
-                  <button
-                    onClick={() => setShowFullText(!showFullText)}
-                    className="flex items-center gap-1 text-xs font-medium text-[var(--text-muted)] mb-1 hover:text-[var(--text-primary)] transition-colors"
-                  >
-                    <FileText size={10} />
-                    Full Text {showFullText ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-                    {selectedPaper.full_text ? (
-                      <span className="badge-green text-[10px]">Available</span>
-                    ) : (
-                      <span className="badge-yellow text-[10px]">Not fetched</span>
-                    )}
-                  </button>
-                  {showFullText && (
-                    <div className="max-h-[400px] overflow-y-auto p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border)]">
-                      <pre className="text-xs text-[var(--text-secondary)] whitespace-pre-wrap leading-relaxed">
-                        {selectedPaper.full_text || selectedPaper.abstract}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex gap-2">
-                  {selectedPaper.url && (
-                    <a
-                      href={selectedPaper.url}
-                      target="_blank"
-                      className="btn-secondary text-xs"
-                    >
-                      <ExternalLink size={12} /> View Paper
-                    </a>
-                  )}
-                  {selectedPaper.full_text && (
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(selectedPaper.full_text);
-                        alert('Full text copied to clipboard!');
-                      }}
-                      className="btn-secondary text-xs"
-                    >
-                      <FileText size={12} /> Copy Full Text
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+        <div className="flex-1" />
+        <div className="relative w-56">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+          <input
+            type="text"
+            className="input pl-8 text-xs py-1.5"
+            placeholder="Search papers..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
       </div>
+
+      {/* Paper List */}
+      {filtered.length === 0 ? (
+        <div className="card text-center py-16">
+          <BookOpen size={32} className="mx-auto mb-2 text-[var(--text-muted)]" />
+          <p className="text-sm text-[var(--text-secondary)]">No papers found</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((paper) => {
+            const isExpanded = expandedPaperId === paper.id;
+            return (
+              <div key={paper.id}
+                className={`card transition-all cursor-pointer ${
+                  isExpanded ? 'border-brand-500/50 bg-brand-600/5' : 'hover:border-brand-500/30'
+                }`}
+                onClick={() => handlePaperClick(paper)}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[var(--text-primary)] leading-snug mb-2">
+                      {paper.title}
+                    </p>
+                    <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
+                      <span className="flex items-center gap-1">
+                        <Calendar size={10} /> {paper.year || 'N/A'}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Star size={10} /> {paper.citations}
+                      </span>
+                      <span className={paper.source === 'arxiv' ? 'badge-blue' : 'badge-purple'}>
+                        {paper.source}
+                      </span>
+                      {paper.full_text && (
+                        <span className="badge-green text-[10px]">Full Text</span>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronDown
+                    size={14}
+                    className={`text-[var(--text-muted)] flex-shrink-0 mt-1 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                  />
+                </div>
+
+                {/* Expanded Detail */}
+                {isExpanded && selectedPaper && (
+                  <div className="mt-4 pt-4 border-t border-[var(--border)] space-y-4" onClick={(e) => e.stopPropagation()}>
+                    {selectedPaper.authors?.length > 0 && (
+                      <div className="flex items-start gap-2 text-xs">
+                        <Users size={12} className="text-[var(--text-muted)] mt-0.5 flex-shrink-0" />
+                        <span className="text-[var(--text-secondary)]">{selectedPaper.authors.join(', ')}</span>
+                      </div>
+                    )}
+
+                    <div>
+                      <p className="text-xs font-medium text-[var(--text-muted)] mb-1">Abstract</p>
+                      <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{selectedPaper.abstract}</p>
+                    </div>
+
+                    {/* Full Text Toggle */}
+                    <div>
+                      <button
+                        onClick={() => setShowFullText(!showFullText)}
+                        className="flex items-center gap-1 text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                      >
+                        <FileText size={10} />
+                        Full Text {showFullText ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                        {selectedPaper.full_text ? (
+                          <span className="badge-green text-[10px]">Available</span>
+                        ) : (
+                          <span className="badge-yellow text-[10px]">Not fetched</span>
+                        )}
+                      </button>
+                      {showFullText && (
+                        <div className="mt-2 max-h-[400px] overflow-y-auto p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border)]">
+                          <pre className="text-xs text-[var(--text-secondary)] whitespace-pre-wrap leading-relaxed">
+                            {selectedPaper.full_text || selectedPaper.abstract}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2">
+                      {selectedPaper.url && (
+                        <a
+                          href={selectedPaper.url}
+                          target="_blank"
+                          className="btn-secondary text-xs"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <ExternalLink size={12} /> View Paper
+                        </a>
+                      )}
+                      {selectedPaper.full_text && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(selectedPaper.full_text);
+                            showToast('Full text copied to clipboard!', 'success');
+                          }}
+                          className="btn-secondary text-xs"
+                        >
+                          <FileText size={12} /> Copy Full Text
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

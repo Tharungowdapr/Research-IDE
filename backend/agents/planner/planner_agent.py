@@ -303,6 +303,29 @@ def _default_file_structure() -> List[str]:
 
 
 def _parse_json(raw: str) -> Dict:
+    if not raw or not raw.strip():
+        return {}
     clean = re.sub(r"```(?:json)?\s*", "", raw).strip().rstrip("`").strip()
+    # Try direct object parse first
     s, e = clean.find("{"), clean.rfind("}") + 1
-    return json.loads(clean[s:e]) if s != -1 and e > s else {}
+    if s != -1 and e > s:
+        try:
+            return json.loads(clean[s:e])
+        except json.JSONDecodeError:
+            pass
+    # Handle truncated JSON — try partial recovery
+    try:
+        cleaned = clean.strip().rstrip(",").rstrip(".").strip()
+        s = cleaned.find("{")
+        if s != -1:
+            partial = cleaned[s:]
+            # Try to balance braces for truncated JSON
+            depth = 0
+            for i, ch in enumerate(partial):
+                if ch == "{": depth += 1
+                elif ch == "}": depth -= 1
+                if depth == 0 and i > 0:
+                    return json.loads(partial[:i+1])
+    except (json.JSONDecodeError, Exception):
+        pass
+    return {}

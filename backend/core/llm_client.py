@@ -208,22 +208,41 @@ class LLMClient:
             headers["HTTP-Referer"] = "http://localhost:3000"
             headers["X-Title"] = "ResearchIDE"
 
+        import asyncio
         base = self.base_urls[self.provider]
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            async with client.stream("POST", f"{base}/chat/completions", headers=headers, json=payload) as resp:
-                resp.raise_for_status()
-                async for line in resp.aiter_lines():
-                    if line.startswith("data: "):
-                        line = line[6:]
-                        if line == "[DONE]":
-                            break
-                        try:
-                            import json
-                            data = json.loads(line)
-                            if data["choices"][0]["delta"].get("content"):
-                                yield data["choices"][0]["delta"]["content"]
-                        except:
-                            pass
+
+        last_exc = None
+        for attempt in range(3):
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    async with client.stream("POST", f"{base}/chat/completions", headers=headers, json=payload) as resp:
+                        if resp.status_code == 429:
+                            wait = min(2 ** attempt, 8)
+                            await asyncio.sleep(wait)
+                            continue
+                        resp.raise_for_status()
+                        async for line in resp.aiter_lines():
+                            if line.startswith("data: "):
+                                line = line[6:]
+                                if line == "[DONE]":
+                                    break
+                                try:
+                                    import json
+                                    data = json.loads(line)
+                                    if data["choices"][0]["delta"].get("content"):
+                                        yield data["choices"][0]["delta"]["content"]
+                                except:
+                                    pass
+                        return
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    last_exc = e
+                    wait = min(2 ** attempt, 8)
+                    await asyncio.sleep(wait)
+                    continue
+                raise
+        if last_exc:
+            raise last_exc
 
     # ── Anthropic ─────────────────────────────────────────────────────────────
 

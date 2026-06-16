@@ -91,13 +91,8 @@ async def run_chat(
 ) -> str:
     """Non-streaming chat response."""
     prompt = build_chat_prompt(question, history, project_context)
-
-    try:
-        response = await llm.complete(prompt, system=CHAT_SYSTEM)
-        return response.strip()
-    except Exception as e:
-        print(f"Chat agent error: {e}")
-        return f"I encountered an error processing your question. Please try again."
+    response = await llm.complete(prompt, system=CHAT_SYSTEM)
+    return response.strip()
 
 
 async def run_chat_stream(
@@ -108,10 +103,5 @@ async def run_chat_stream(
 ) -> AsyncGenerator[str, None]:
     """Streaming chat response."""
     prompt = build_chat_prompt(question, history, project_context)
-
-    try:
-        async for chunk in llm.stream_complete(prompt, system=CHAT_SYSTEM):
-            yield chunk
-    except Exception as e:
-        print(f"Chat streaming error: {e}")
-        yield f"I encountered an error processing your question. Please try again."
+    async for chunk in llm.stream_complete(prompt, system=CHAT_SYSTEM):
+        yield chunk

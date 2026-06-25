@@ -17,7 +17,7 @@ class Project(Base):
     title = Column(String, nullable=False)
     input_text = Column(Text, nullable=False)
     status = Column(String, default="created")  # created | processing | ideas | planning | done
-    current_stage = Column(String, default="input")  # input | papers | gaps | ideas | planner | code | report
+    current_stage = Column(String, default="input")  # analysis | papers | gaps | ideas | objectives | planner | data | code | experiments | results | guide | report | publish
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -33,7 +33,7 @@ class Output(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     project_id = Column(String, ForeignKey("projects.id"), nullable=False, index=True)
-    output_type = Column(String, nullable=False)  # intent | papers | gaps | ideas | plan | code | report
+    output_type = Column(String, nullable=False)  # intent | papers | gaps | ideas | plan | code | report | analysis | objectives | data_plan | experiments | analysis_template | guide | review
     data = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -42,6 +42,24 @@ class Output(Base):
 
     def __repr__(self):
         return f"<Output id={self.id} type={self.output_type}>"
+
+
+class UsageLog(Base):
+    __tablename__ = "usage_logs"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    provider = Column(String, nullable=False)
+    model = Column(String, nullable=False)
+    prompt_tokens = Column(String, default="0")
+    completion_tokens = Column(String, default="0")
+    total_tokens = Column(String, default="0")
+    cost_usd = Column(String, default="0.0")
+    energy_wh = Column(String, default="0.0")   # estimated watt-hours
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    def __repr__(self):
+        return f"<UsageLog user={self.user_id} provider={self.provider} tokens={self.total_tokens}>"
 
 
 class PaperCache(Base):

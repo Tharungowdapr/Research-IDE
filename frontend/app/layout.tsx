@@ -1,12 +1,20 @@
 import type { Metadata } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
+import { Crimson_Pro, Atkinson_Hyperlegible, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
 
-const inter = Inter({
+const crimsonPro = Crimson_Pro({
   subsets: ['latin'],
   display: 'swap',
-  variable: '--font-inter',
+  variable: '--font-heading',
+  weight: ['400', '500', '600', '700'],
+});
+
+const atkinson = Atkinson_Hyperlegible({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-body',
+  weight: ['400', '700'],
 });
 
 const jetbrainsMono = JetBrains_Mono({
@@ -29,8 +37,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className="antialiased" style={{ fontFamily: 'var(--font-inter), system-ui, sans-serif' }}>
+    <html lang="en" suppressHydrationWarning className={`${crimsonPro.variable} ${atkinson.variable} ${jetbrainsMono.variable}`}>
+      <body className="antialiased" style={{ fontFamily: 'var(--font-body), system-ui, sans-serif' }}>
         <Providers>{children}</Providers>
       </body>
     </html>

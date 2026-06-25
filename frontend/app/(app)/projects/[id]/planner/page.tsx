@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Cpu, ArrowRight, Loader2, AlertCircle, CheckCircle2, Clock, Package, BookOpen, DollarSign, AlertTriangle, GitBranch, BarChart3 } from 'lucide-react';
+import { Cpu, ArrowRight, Loader2, AlertCircle, CheckCircle2, Clock, Package, BookOpen, DollarSign, AlertTriangle, GitBranch, BarChart3, FolderTree } from 'lucide-react';
 import { projectsAPI, agentsAPI } from '@/services/api';
 import { parse } from 'partial-json';
 
@@ -17,12 +17,18 @@ export default function PlannerPage() {
   const streamContent = useRef('');
 
   useEffect(() => {
-    projectsAPI.get(id).then((p) => {
-      if (p.outputs?.plan) {
-        setPlan(p.outputs.plan);
+    (async () => {
+      try {
+        const p = await projectsAPI.get(id);
+        if (p.outputs?.plan) {
+          setPlan(p.outputs.plan);
+        }
+      } catch (e: any) {
+        setError(e.response?.data?.detail || 'Failed to load project');
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    });
+    })();
   }, [id]);
 
   const handleGenerate = () => {
@@ -58,7 +64,7 @@ export default function PlannerPage() {
   };
 
   const handleProceed = () => {
-    router.push(`/projects/${id}/guide`);
+    router.push(`/projects/${id}/data`);
   };
 
   const safeStr = (val: any): string => {
@@ -68,6 +74,7 @@ export default function PlannerPage() {
       if (val.name) return String(val.name);
       if (val.task) return String(val.task);
       if (val.description) return String(val.description);
+      if (val.error) return String(val.error);
       try { return JSON.stringify(val); } catch { return ''; }
     }
     return String(val);
@@ -86,9 +93,9 @@ export default function PlannerPage() {
     return (
       <div className="p-8 flex flex-col items-center justify-center min-h-[400px] gap-4">
         <Cpu size={32} className="text-[var(--text-muted)]" />
-        <p className="text-sm text-[var(--text-secondary)]">No execution plan yet.</p>
+        <p className="text-sm text-[var(--text-secondary)]">No methodology plan yet.</p>
         <button onClick={handleGenerate} className="btn-primary">
-          Generate Plan
+          Generate Methodology
         </button>
       </div>
     );
@@ -98,7 +105,7 @@ export default function PlannerPage() {
     return (
       <div className="p-8 flex flex-col items-center justify-center min-h-[400px] gap-3">
         <Loader2 className="animate-spin text-brand-400" size={24} />
-        <p className="text-sm text-[var(--text-secondary)]">Generating execution plan...</p>
+        <p className="text-sm text-[var(--text-secondary)]">Generating methodology plan...</p>
       </div>
     );
   }
@@ -109,18 +116,18 @@ export default function PlannerPage() {
     <div className="p-8 max-w-4xl mx-auto">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-[var(--text-primary)]">Execution Plan</h1>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">Step 5 of 7 — Timeline: {safeStr(plan.total_estimate)}</p>
+          <h1 className="text-xl font-bold text-[var(--text-primary)]">Methodology & Architecture</h1>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">Step 6 of 13 — Timeline: {safeStr(plan.total_estimate)}</p>
         </div>
         <button onClick={handleProceed} disabled={streaming} className="btn-primary">
           {streaming ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />}
-          {streaming ? 'Generating Plan...' : 'Research Guide'}
+          {streaming ? 'Generating Plan...' : 'Data Pipeline'}
         </button>
       </div>
 
       {error && (
         <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400 flex gap-2">
-          <AlertCircle size={14} className="flex-shrink-0 mt-0.5" /> {error}
+          <AlertCircle size={14} className="flex-shrink-0 mt-0.5" /> {String(error)}
         </div>
       )}
 
@@ -130,6 +137,41 @@ export default function PlannerPage() {
           <h2 className="font-semibold text-sm text-[var(--text-primary)] mb-2">Overview</h2>
           <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{safeStr(plan.overview)}</p>
         </div>
+
+        {/* Architecture */}
+        {plan.architecture && (
+          <div className="card">
+            <h2 className="font-semibold text-sm text-[var(--text-primary)] mb-2 flex items-center gap-2">
+              <Cpu size={14} className="text-brand-400" /> Architecture
+            </h2>
+            {plan.architecture.components?.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {plan.architecture.components.map((c: string, i: number) => (
+                  <span key={i} className="badge-blue">{safeStr(c)}</span>
+                ))}
+              </div>
+            )}
+            {plan.architecture.diagram_description && (
+              <p className="text-xs text-[var(--text-secondary)]">{safeStr(plan.architecture.diagram_description)}</p>
+            )}
+          </div>
+        )}
+
+        {/* Project Structure */}
+        {plan.project_structure?.length > 0 && (
+          <div className="card">
+            <h2 className="font-semibold text-sm text-[var(--text-primary)] mb-3 flex items-center gap-2">
+              <FolderTree size={14} className="text-brand-400" /> Project Structure
+            </h2>
+            <div className="grid grid-cols-1 gap-1">
+              {plan.project_structure.map((item: string, i: number) => (
+                <div key={i} className="flex items-center gap-2 text-xs text-[var(--text-secondary)] font-mono">
+                  <span className="text-[var(--text-muted)]">├──</span> {safeStr(item)}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Phases with Timeline */}
         <div className="card">

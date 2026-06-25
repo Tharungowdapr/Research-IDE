@@ -4,7 +4,7 @@ User SQLAlchemy model
 
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Text, JSON
+from sqlalchemy import Column, String, DateTime, Text, JSON, Integer, Float
 from core.database import Base
 
 
@@ -32,6 +32,11 @@ class User(Base):
     # Encrypted Zotero API key
     zotero_key_encrypted = Column(String, nullable=True)
     zotero_user_id = Column(String, nullable=True)
+
+    # Usage tracking (cumulative)
+    total_prompt_tokens = Column(Integer, default=0)
+    total_completion_tokens = Column(Integer, default=0)
+    total_cost_usd = Column(Float, default=0.0)
 
     def __repr__(self):
         return f"<User id={self.id} email={self.email}>"

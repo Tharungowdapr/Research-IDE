@@ -117,10 +117,10 @@ async def run_research_guide_generation(
         result = _parse_json(raw)
         if "project_report" in result:
             return result
-        return _fallback_guide(idea, papers, plan)
+        raise ValueError("LLM response missing 'project_report' key")
     except Exception as e:
         print(f"Research guide error: {e}")
-        return _fallback_guide(idea, papers, plan)
+        raise ValueError(f"Guide generation failed: {e}") from e
 
 
 def _format_papers_for_prompt(papers: List[Dict]) -> str:
@@ -131,101 +131,6 @@ def _format_papers_for_prompt(papers: List[Dict]) -> str:
         snippet = text[:150].replace("\n", " ")
         lines.append(f"[{i}] {authors}. \"{p.get('title', '')}\" — {snippet}...")
     return "\n".join(lines)
-
-
-def _fallback_guide(idea: Dict, papers: List[Dict], plan: Dict) -> Dict:
-    title = idea.get("title", "Research Project")
-    description = idea.get("description", "a research project")
-    tech = plan.get("tech_stack", {})
-
-    return {
-        "project_report": {
-            "title": title,
-            "executive_summary": (
-                f"This project addresses {description}. The research follows a systematic "
-                f"methodology combining literature review, experimental design, and rigorous "
-                f"evaluation. Expected outcomes include novel insights and practical contributions "
-                f"to the field."
-            ),
-            "methodology_walkthrough": [
-                {
-                    "step": "Step 1: Literature Review & Problem Formulation",
-                    "description": "Conduct a thorough review of existing literature to refine the research question and identify specific gaps to address.",
-                    "tools": ["Semantic Scholar", "arXiv", "Google Scholar"],
-                    "expected_output": "Refined problem statement with clear objectives",
-                    "time_estimate": "2-3 weeks",
-                },
-                {
-                    "step": "Step 2: Data Collection & Preparation",
-                    "description": "Gather and preprocess the required datasets. Ensure data quality and appropriate train/val/test splits.",
-                    "tools": ["pandas", "numpy", "datasets"],
-                    "expected_output": "Clean, split datasets ready for experimentation",
-                    "time_estimate": "2-4 weeks",
-                },
-                {
-                    "step": "Step 3: Implementation & Experimentation",
-                    "description": "Implement the proposed approach, run experiments, and collect results. Track all experiments systematically.",
-                    "tools": ["PyTorch", "wandb", "hydra"],
-                    "expected_output": "Trained models and experimental results",
-                    "time_estimate": "4-8 weeks",
-                },
-                {
-                    "step": "Step 4: Evaluation & Analysis",
-                    "description": "Evaluate results using appropriate metrics. Perform ablation studies and statistical analysis.",
-                    "tools": ["scikit-learn", "scipy", "matplotlib"],
-                    "expected_output": "Quantitative results and visualizations",
-                    "time_estimate": "2-3 weeks",
-                },
-                {
-                    "step": "Step 5: Paper Writing & Dissemination",
-                    "description": "Write the research paper, create figures, and prepare supplementary materials.",
-                    "tools": ["LaTeX", "Overleaf", "draw.io"],
-                    "expected_output": "Conference-ready paper submission",
-                    "time_estimate": "3-4 weeks",
-                },
-            ],
-            "tech_stack_recommendations": {
-                "programming_languages": tech.get("languages", ["Python"]),
-                "frameworks_libraries": tech.get("frameworks", ["PyTorch", "HuggingFace"]),
-                "experiment_tracking": ["wandb", "mlflow"],
-                "data_tools": ["pandas", "numpy", "datasets"],
-                "visualization": ["matplotlib", "seaborn", "plotly"],
-                "compute_resources": ["local GPU", "Google Colab Pro", "AWS"],
-                "estimated_costs": "Free to $XXX/month depending on compute",
-            },
-            "research_methodology": {
-                "approach": "quantitative",
-                "data_collection": "Public datasets and benchmarks identified in the proposal",
-                "experiment_design": "Controlled experiments with ablation studies",
-                "statistical_analysis": "Paired t-tests, confidence intervals, effect size",
-                "validation_strategy": "Cross-validation with held-out test set",
-            },
-            "related_work_deep_dive": [
-                {
-                    "topic": f"Core area of {title}",
-                    "key_papers": [f"{p.get('title', 'Related work')} — {p.get('year', '')}" for p in papers[:4]],
-                    "how_this_differs": "This work advances beyond existing approaches by addressing identified gaps in the literature.",
-                }
-            ],
-            "project_timeline": [
-                {"phase": p.get("name", f"Phase {i+1}"), "duration": p.get("duration", "TBD"),
-                 "tasks": p.get("tasks", []), "milestones": p.get("deliverables", [])}
-                for i, p in enumerate(plan.get("phases", []))
-            ],
-            "success_criteria": [
-                "Achieve competitive performance on benchmark datasets",
-                "Ablation studies confirm each component contributes positively",
-                "Reproducible results with documented experimental setup",
-            ],
-            "potential_challenges": plan.get("risks", ["Data scarcity", "Compute constraints"]),
-            "mitigation_strategies": [
-                "Use data augmentation if data is limited",
-                "Start with smaller models for faster iteration",
-                "Document all experiments for reproducibility",
-            ],
-        },
-        "_fallback": True,
-    }
 
 
 def _parse_json(raw: str) -> Dict:

@@ -104,10 +104,9 @@ async def run_guide_generation(
         result = _parse_json(raw)
         if result and "project_report" in result:
             return result
-        return _fallback_guide(idea, papers, gaps, plan, intent)
+        raise ValueError("Guide generation failed: LLM output missing 'project_report'")
     except Exception as e:
-        print(f"Guide agent error: {e}")
-        return _fallback_guide(idea, papers, gaps, plan, intent)
+        raise ValueError(f"Guide generation failed: {e}") from e
 
 
 def _format_papers_for_prompt(papers: List[Dict]) -> str:
@@ -120,89 +119,6 @@ def _format_papers_for_prompt(papers: List[Dict]) -> str:
         lines.append(f"{i}. [{year}] {authors}. \"{title}\".\n   {abstract}...")
     return "\n\n".join(lines)
 
-
-def _fallback_guide(idea: Dict, papers: List[Dict], gaps: List[Dict], plan: Dict, intent: Dict) -> Dict:
-    domain = ", ".join(intent.get("domain", ["AI/ML"]))
-    description = idea.get("description", "the research problem")
-
-    methodology_steps = []
-    if plan:
-        phases = plan.get("phases", plan.get("steps", []))
-        for i, phase in enumerate(phases):
-            methodology_steps.append({
-                "step": phase.get("phase", phase.get("name", f"Phase {i+1}")),
-                "description": phase.get("description", f"Execute {phase.get('phase', f'phase {i+1}')}"),
-                "tools": phase.get("tools", []),
-                "time_estimate": phase.get("duration", "TBD"),
-                "difficulty": "intermediate",
-            })
-
-    if not methodology_steps:
-        methodology_steps = [
-            {"step": "Literature Review", "description": f"Conduct comprehensive review of {domain} literature", "tools": ["Semantic Scholar", "Google Scholar"], "time_estimate": "2-3 weeks", "difficulty": "beginner"},
-            {"step": "Data Collection", "description": f"Gather and prepare datasets for {domain} research", "tools": ["Python", "Pandas"], "time_estimate": "3-4 weeks", "difficulty": "intermediate"},
-            {"step": "Implementation", "description": f"Implement proposed methodology for {description}", "tools": ["PyTorch", "scikit-learn"], "time_estimate": "4-6 weeks", "difficulty": "advanced"},
-            {"step": "Evaluation", "description": "Evaluate results against baselines and state-of-the-art", "tools": ["Jupyter", "Weights & Biases"], "time_estimate": "2-3 weeks", "difficulty": "intermediate"},
-            {"step": "Paper Writing", "description": "Write and format the research paper", "tools": ["LaTeX", "Overleaf"], "time_estimate": "2-3 weeks", "difficulty": "beginner"},
-        ]
-
-    gap_names = [g.get("title", "") for g in (gaps or [])[:3]]
-
-    return {
-        "project_report": {
-            "executive_summary": f"This research project addresses {description} in the domain of {domain}. "
-                               f"The proposed approach combines established methodologies with novel contributions "
-                               f"to advance the state of the art. The guide below provides a comprehensive roadmap "
-                               f"for executing this research project successfully.",
-            "methodology_walkthrough": methodology_steps,
-            "tech_stack_recommendations": {
-                "frameworks": ["PyTorch", "TensorFlow", "scikit-learn"],
-                "libraries": ["transformers", "datasets", "numpy", "pandas"],
-                "tools": ["Jupyter Notebook", "Weights & Biases", "Git"],
-                "datasets": ["domain-specific datasets"],
-                "hardware": ["GPU (minimum 8GB VRAM)", "16GB+ RAM"],
-            },
-            "research_methodology": {
-                "approach_type": "mixed",
-                "data_collection": "Automated data collection from public datasets and benchmarks",
-                "evaluation_framework": "Standard metrics and cross-validation with statistical significance testing",
-                "validation_strategy": "Hold-out validation with multiple train-test splits",
-            },
-            "related_work_deep_dive": [
-                {
-                    "topic": domain,
-                    "key_papers": [p.get("title", "") for p in papers[:5]],
-                    "how_this_differs": f"This work addresses gaps not covered in existing {domain} literature",
-                }
-            ],
-            "project_timeline": [
-                {"phase": "Literature Review", "duration": "2-3 weeks", "tasks": ["Review related work", "Identify gaps", "Refine research questions"]},
-                {"phase": "Implementation", "duration": "4-6 weeks", "tasks": ["Set up environment", "Implement baseline", "Develop proposed method"]},
-                {"phase": "Experimentation", "duration": "3-4 weeks", "tasks": ["Run experiments", "Collect results", "Statistical analysis"]},
-                {"phase": "Paper Writing", "duration": "2-3 weeks", "tasks": ["Write draft", "Create figures", "Format and submit"]},
-            ],
-            "success_criteria": [
-                "Outperform baseline methods on primary metrics",
-                "Ablation studies validate each component's contribution",
-                "Reproducible results with documented code and data",
-            ],
-            "potential_challenges": [
-                "Limited computational resources",
-                "Data availability and quality",
-                "Reproducibility across different environments",
-            ],
-            "mitigation_strategies": [
-                "Use cloud computing and pre-trained models to reduce compute needs",
-                "Leverage multiple data sources and augmentation techniques",
-                "Containerize environment and document all dependencies",
-            ],
-            "resources_needed": [
-                "GPU compute (cloud or local)",
-                f"Access to {domain} datasets",
-                "Python development environment",
-            ],
-        }
-    }
 
 
 def _parse_json(raw: str) -> Dict:

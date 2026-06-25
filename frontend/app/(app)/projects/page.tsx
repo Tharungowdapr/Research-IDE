@@ -7,8 +7,15 @@ import { projectsAPI } from '@/services/api';
 import { formatDistanceToNow } from 'date-fns';
 
 const STAGE_LABELS: Record<string, string> = {
-  input: 'Input', papers: 'Papers', gaps: 'Gaps',
-  ideas: 'Ideas', planner: 'Planning', code: 'Code', report: 'Report',
+  analysis: 'NLP Analysis', papers: 'Literature Review', gaps: 'Research Gap',
+  ideas: 'Research Ideas', objectives: 'Objectives', planner: 'Methodology', data: 'Data Pipeline',
+  code: 'Implementation', experiments: 'Experiments', results: 'Results Analysis',
+  guide: 'Research Guide', report: 'Paper Writing', publish: 'Review & Publish',
+  input: 'Input',
+};
+
+const STAGE_MAP: Record<string, string> = {
+  input: 'analysis', ideas: 'ideas',
 };
 
 export default function ProjectsPage() {
@@ -58,7 +65,7 @@ export default function ProjectsPage() {
           {projects.map((project) => (
             <Link
               key={project.id}
-              href={`/projects/${project.id}/${project.current_stage || 'input'}`}
+              href={`/projects/${project.id}/${STAGE_MAP[project.current_stage] || project.current_stage || 'analysis'}`}
               className="card flex items-center gap-4 hover:border-brand-500/30 hover:bg-[var(--bg-hover)] transition-all cursor-pointer group"
             >
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600/10 flex-shrink-0">
@@ -68,7 +75,7 @@ export default function ProjectsPage() {
                 <p className="font-medium text-sm text-[var(--text-primary)] truncate">{project.title}</p>
                 <p className="text-xs text-[var(--text-muted)] mt-0.5 line-clamp-1">{project.input_text}</p>
                 <div className="flex items-center gap-2 mt-1.5">
-                  <span className="badge-blue">{STAGE_LABELS[project.current_stage] || project.current_stage}</span>
+                  <span className="badge-blue">{STAGE_LABELS[STAGE_MAP[project.current_stage] || project.current_stage] || project.current_stage}</span>
                   <span className="flex items-center gap-1 text-xs text-[var(--text-muted)]">
                     <Clock size={10} />
                     {formatDistanceToNow(new Date(project.updated_at), { addSuffix: true })}

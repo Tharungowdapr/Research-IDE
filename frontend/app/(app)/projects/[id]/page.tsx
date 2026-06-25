@@ -10,9 +10,14 @@ export default function ProjectDetailPage() {
   const router = useRouter();
 
   useEffect(() => {
+    const STAGE_MAP: Record<string, string> = {
+      input: 'analysis', ideas: 'ideas',
+    };
+
     projectsAPI.get(id)
       .then((project) => {
-        const stage = project.current_stage || 'input';
+        const raw = project.current_stage || 'input';
+        const stage = STAGE_MAP[raw] || raw;
         router.replace(`/projects/${id}/${stage}`);
       })
       .catch(() => {

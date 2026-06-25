@@ -23,6 +23,11 @@ from agents.planner.planner_agent import run_planning, run_planning_stream
 from agents.code_agent.code_agent import run_code_generation, run_code_generation_stream
 from agents.writer.writer_agent import run_report_generation
 from agents.literature_review_agent import generate_literature_review as _generate_literature_review, generate_annotated_bibliography as _generate_annotated_bibliography
+from agents.objective_generator.objective_agent import run_objective_generation
+from agents.data_agent.data_agent import run_data_plan_generation
+from agents.experiment_agent.experiment_agent import run_experiment_generation
+from agents.analysis_agent.analysis_agent import run_analysis_generation
+from agents.review_agent import run_review_generation
 from agents.guide_agent import run_guide_generation
 from agents.presentation_agent import run_presentation_generation
 from agents.chat_agent import run_chat, run_chat_stream
@@ -111,10 +116,149 @@ async def select_idea(
 
     selected = ideas[body.idea_index]
     _save_output(db, project.id, "selected_idea", {"idea": selected})
-    project.current_stage = "planner"
+    project.current_stage = "objectives"
     db.commit()
 
     return {"project_id": project.id, "selected_idea": selected}
+
+
+@router.post("/generate-objectives")
+async def generate_objectives(
+    body: AgentRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Generate SMART research objectives from the selected idea and gaps."""
+    project = _get_project(body.project_id, current_user.id, db)
+    selected = _get_output(db, project.id, "selected_idea")
+    gaps = _get_output(db, project.id, "gaps")
+    if not selected:
+        raise HTTPException(status_code=400, detail="Select an idea first")
+
+    llm = build_llm_client_for_user(current_user, max_tokens=4096)
+    plan = _get_output(db, project.id, "plan")
+    papers_data = _get_output(db, project.id, "papers") or {"papers": []}
+    intent = _get_output(db, project.id, "intent") or {}
+
+    try:
+        objectives = await run_objective_generation(
+            selected.get("idea", {}),
+            gaps.get("gaps", []) if gaps else [],
+            llm,
+            plan=plan or {},
+            papers=papers_data.get("papers", []),
+            intent=intent,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Objective generation failed: {str(e)}")
+
+    _save_output(db, project.id, "objectives", {"objectives": objectives})
+    return {"project_id": project.id, "objectives": objectives}
+
+
+@router.post("/generate-data-plan")
+async def generate_data_plan(
+    body: AgentRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Generate data pipeline plan."""
+    project = _get_project(body.project_id, current_user.id, db)
+    selected = _get_output(db, project.id, "selected_idea")
+    plan = _get_output(db, project.id, "plan")
+    if not selected:
+        raise HTTPException(status_code=400, detail="Select an idea first")
+
+    llm = build_llm_client_for_user(current_user, max_tokens=4096)
+    try:
+        data_plan = await run_data_plan_generation(
+            selected.get("idea", {}), plan or {}, llm,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Data plan failed: {str(e)}")
+    _save_output(db, project.id, "data_plan", data_plan)
+    return {"project_id": project.id, "data_plan": data_plan}
+
+
+@router.post("/generate-experiments")
+async def generate_experiments(
+    body: AgentRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Generate experiment designs."""
+    project = _get_project(body.project_id, current_user.id, db)
+    selected = _get_output(db, project.id, "selected_idea")
+    plan = _get_output(db, project.id, "plan")
+    if not selected:
+        raise HTTPException(status_code=400, detail="Select an idea first")
+
+    llm = build_llm_client_for_user(current_user, max_tokens=4096)
+    try:
+        experiments = await run_experiment_generation(
+            selected.get("idea", {}), plan or {}, llm,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Experiment generation failed: {str(e)}")
+    _save_output(db, project.id, "experiments", experiments)
+    return {"project_id": project.id, "experiments": experiments}
+
+
+@router.post("/generate-analysis")
+async def generate_analysis(
+    body: AgentRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Generate results analysis template."""
+    project = _get_project(body.project_id, current_user.id, db)
+    selected = _get_output(db, project.id, "selected_idea")
+    if not selected:
+        raise HTTPException(status_code=400, detail="Select an idea first")
+
+    llm = build_llm_client_for_user(current_user, max_tokens=4096)
+    try:
+        analysis = await run_analysis_generation(
+            selected.get("idea", {}), llm,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis generation failed: {str(e)}")
+    _save_output(db, project.id, "analysis_template", analysis)
+    return {"project_id": project.id, "analysis": analysis}
+
+
+@router.post("/generate-review")
+async def generate_review(
+    body: AgentRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Generate review checklist and publication advice."""
+    project = _get_project(body.project_id, current_user.id, db)
+    selected = _get_output(db, project.id, "selected_idea")
+    if not selected:
+        raise HTTPException(status_code=400, detail="Select an idea first")
+
+    llm = build_llm_client_for_user(current_user, max_tokens=4096)
+    gaps = _get_output(db, project.id, "gaps")
+    plan = _get_output(db, project.id, "plan")
+    papers_data = _get_output(db, project.id, "papers") or {"papers": []}
+    objectives = _get_output(db, project.id, "objectives")
+    intent = _get_output(db, project.id, "intent") or {}
+
+    try:
+        review = await run_review_generation(
+            selected.get("idea", {}), llm,
+            gaps=gaps.get("gaps", []) if gaps else None,
+            papers=papers_data.get("papers", []),
+            plan=plan or None,
+            objectives=objectives.get("objectives", []) if objectives else None,
+            intent=intent,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Review generation failed: {str(e)}")
+    _save_output(db, project.id, "review", review)
+    return {"project_id": project.id, "review": review}
 
 
 @router.post("/plan")
@@ -125,9 +269,10 @@ async def create_plan(
 ):
     """Generate execution plan for the selected idea."""
     project, papers_data, intent = _load_project_context(body.project_id, current_user.id, db)
-    selected = _get_output(db, project.id, "selected_idea")
+    selected = _get_output(db, project.id, "selected_idea") or _auto_select_idea(db, project)
+
     if not selected:
-        raise HTTPException(status_code=400, detail="Select an idea first")
+        raise HTTPException(status_code=400, detail="No ideas found. Generate ideas first.")
 
     llm = build_llm_client_for_user(current_user, max_tokens=8192)
 
@@ -138,7 +283,7 @@ async def create_plan(
         raise HTTPException(status_code=500, detail=f"Planning failed: {str(e)}")
 
     _save_output(db, project.id, "plan", plan)
-    project.current_stage = "code"
+    project.current_stage = "data"
     db.commit()
 
     return {"project_id": project.id, "plan": plan}
@@ -151,9 +296,10 @@ async def create_plan_stream(
 ):
     """Generate execution plan using SSE."""
     project, papers_data, intent = _load_project_context(body.project_id, current_user.id, db)
-    selected = _get_output(db, project.id, "selected_idea")
+    selected = _get_output(db, project.id, "selected_idea") or _auto_select_idea(db, project)
+
     if not selected:
-        raise HTTPException(status_code=400, detail="Select an idea first")
+        raise HTTPException(status_code=400, detail="No ideas found. Generate ideas first.")
 
     llm = build_llm_client_for_user(current_user, max_tokens=8192)
     papers_list = papers_data.get("papers", [])
@@ -188,7 +334,7 @@ async def create_plan_stream(
                         
                     parsed_plan = json_lib.loads(content_to_parse)
                     _save_output(db, project.id, "plan", parsed_plan)
-                    project.current_stage = "code"
+                    project.current_stage = "data"
                     db.commit()
                 except Exception as e:
                     logging.error(f"Failed to parse streamed plan: {e}")
@@ -215,16 +361,22 @@ async def generate_code(
 
     llm = build_llm_client_for_user(current_user)
 
-    file_hints = plan.get("file_structure", [])
+    file_hints = plan.get("file_structure", []) or plan.get("project_structure", [])
     papers_list = papers_data.get("papers", [])
+    idea_data = selected.get("idea", {})
 
     try:
-        code = await run_code_generation(selected.get("idea", {}), plan, llm, file_hints=file_hints, papers=papers_list)
+        code = await run_code_generation(
+            body.project_id, intent or "", papers_list, current_user.id, llm,
+            idea=idea_data,
+            plan=plan or {},
+            project_structure=file_hints if isinstance(file_hints, list) else None,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Code generation failed: {str(e)}")
 
     _save_output(db, project.id, "code", code)
-    project.current_stage = "report"
+    project.current_stage = "experiments"
     db.commit()
 
     return {"project_id": project.id, "code": code}
@@ -243,21 +395,29 @@ async def generate_code_stream(
         raise HTTPException(status_code=400, detail="Complete planning step first")
 
     llm = build_llm_client_for_user(current_user)
-    file_hints = plan.get("file_structure", [])
+    file_hints = plan.get("file_structure", []) or plan.get("project_structure", [])
     papers_list = papers_data.get("papers", [])
+    idea_data = selected.get("idea", {})
 
     async def event_generator():
         try:
             full_content = ""
             try:
-                async for chunk in run_code_generation_stream(selected.get("idea", {}), plan, llm, file_hints=file_hints, papers=papers_list):
+                async for chunk in run_code_generation_stream(
+                    project_id, intent or "", papers_list, current_user.id, llm,
+                    idea=idea_data, plan=plan or {},
+                    project_structure=file_hints if isinstance(file_hints, list) else None,
+                ):
                     full_content += chunk
                     yield f"data: {json_lib.dumps({'chunk': chunk})}\n\n"
             except Exception as stream_err:
                 logging.warning(f"Code streaming failed, falling back to non-streaming: {stream_err}")
-                # Fallback: use non-streaming code generation
                 try:
-                    code = await run_code_generation(selected.get("idea", {}), plan, llm, file_hints=file_hints, papers=papers_list)
+                    code = await run_code_generation(
+                        project_id, intent or "", papers_list, current_user.id, llm,
+                        idea=idea_data, plan=plan or {},
+                        project_structure=file_hints if isinstance(file_hints, list) else None,
+                    )
                     full_content = json_lib.dumps(code)
                     yield f"data: {json_lib.dumps({'chunk': json_lib.dumps(code)})}\n\n"
                 except Exception as fallback_err:
@@ -275,7 +435,7 @@ async def generate_code_stream(
                         
                     parsed_code = json_lib.loads(content_to_parse)
                     _save_output(db, project.id, "code", parsed_code)
-                    project.current_stage = "report"
+                    project.current_stage = "experiments"
                     db.commit()
                 except Exception as parse_err:
                     logging.error(f"Failed to parse streamed code: {parse_err}")
@@ -339,6 +499,19 @@ def _load_project_context(project_id: str, user_id: str, db: Session):
     return project, papers_data, intent
 
 
+def _auto_select_idea(db: Session, project: Project) -> Optional[dict]:
+    """Auto-select the first idea if none is explicitly selected."""
+    ideas_output = _get_output(db, project.id, "ideas")
+    if not ideas_output:
+        return None
+    ideas = ideas_output.get("ideas", [])
+    if not ideas:
+        return None
+    selected = {"idea": ideas[0]}
+    _save_output(db, project.id, "selected_idea", selected)
+    return selected
+
+
 def _save_output(db: Session, project_id: str, output_type: str, data: dict):
     existing = db.query(Output).filter(
         Output.project_id == project_id,
@@ -382,7 +555,11 @@ async def literature_review_route(
             intent or {},
             llm
         )
+        if isinstance(review, dict) and review.get("error"):
+            raise HTTPException(status_code=500, detail=review["error"])
         return review
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Literature review generation failed: {str(e)}")
 
@@ -557,6 +734,8 @@ async def generate_presentation(
 
     llm = build_llm_client_for_user(current_user)
     idea = selected.get("idea", {})
+    gaps = _get_output(db, project.id, "gaps")
+    plan = _get_output(db, project.id, "plan")
 
     try:
         presentation = await run_presentation_generation(
@@ -565,6 +744,8 @@ async def generate_presentation(
             papers_data.get("papers", []),
             intent,
             llm,
+            gaps=gaps.get("gaps", []) if gaps else None,
+            plan=plan or None,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Presentation generation failed: {str(e)}")

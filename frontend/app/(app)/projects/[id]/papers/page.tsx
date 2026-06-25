@@ -28,10 +28,16 @@ export default function PapersPage() {
   const [showCitationGraph, setShowCitationGraph] = useState(false);
 
   useEffect(() => {
-    projectsAPI.get(id).then((p) => {
-      setPapers(p.outputs?.papers?.papers || []);
-      setLoading(false);
-    });
+    (async () => {
+      try {
+        const p = await projectsAPI.get(id);
+        setPapers(p.outputs?.papers?.papers || []);
+      } catch (e: any) {
+        setError(e.response?.data?.detail || 'Failed to load project');
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [id]);
 
   const fetchFullText = async (paper: any) => {
@@ -100,7 +106,7 @@ export default function PapersPage() {
         <div>
           <h1 className="text-xl font-bold text-[var(--text-primary)]">Paper Explorer</h1>
           <p className="text-xs text-[var(--text-muted)] mt-0.5">
-            Step 2 of 7 — {papers.length} papers retrieved
+            Step 2 of 13 — {papers.length} papers retrieved
           </p>
         </div>
         <button
@@ -115,7 +121,7 @@ export default function PapersPage() {
 
       {error && (
         <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400 flex items-center gap-2">
-          <AlertCircle size={14} /> {error}
+          <AlertCircle size={14} /> {String(error)}
         </div>
       )}
 

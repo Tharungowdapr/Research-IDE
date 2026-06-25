@@ -9,6 +9,7 @@ Usage:
 
 import httpx
 import json
+import asyncio
 from typing import Optional, List, Dict, AsyncGenerator
 from enum import Enum
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -28,7 +29,7 @@ class LLMProvider(str, Enum):
 PROVIDER_DEFAULTS = {
     LLMProvider.OPENAI: "gpt-4o-mini",
     LLMProvider.ANTHROPIC: "claude-3-haiku-20240307",
-    LLMProvider.GROQ: "llama-3.1-70b-versatile",
+    LLMProvider.GROQ: "llama-3.3-70b-versatile",
     LLMProvider.GEMINI: "gemini-1.5-flash",
     LLMProvider.COHERE: "command-r",
     LLMProvider.OLLAMA: "llama3.2",
@@ -50,10 +51,9 @@ PROVIDER_MODELS = {
     ],
     LLMProvider.GROQ: [
         {"id": "llama-3.3-70b-versatile", "name": "Llama 3.3 70B (Best)", "context": "128k"},
-        {"id": "llama-3.1-70b-versatile", "name": "Llama 3.1 70B", "context": "128k"},
+        {"id": "meta-llama/llama-4-scout-17b-16e-instruct", "name": "Llama 4 Scout 17B", "context": "128k"},
         {"id": "llama-3.1-8b-instant", "name": "Llama 3.1 8B (Fastest)", "context": "128k"},
-        {"id": "mixtral-8x7b-32768", "name": "Mixtral 8x7B", "context": "32k"},
-        {"id": "gemma2-9b-it", "name": "Gemma2 9B", "context": "8k"},
+        {"id": "qwen/qwen3-32b", "name": "Qwen3 32B", "context": "128k"},
     ],
     LLMProvider.GEMINI: [
         {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro (Best)", "context": "1M"},
@@ -86,12 +86,14 @@ class LLMClient:
         base_url: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 2048,
+        user_id: Optional[str] = None,
     ):
         self.provider = LLMProvider(provider)
         self.api_key = api_key
         self.model = model or PROVIDER_DEFAULTS.get(self.provider, "llama3.2")
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.user_id = user_id  # for usage logging
 
         # Base URLs
         self.base_urls = {
@@ -107,27 +109,187 @@ class LLMClient:
         if base_url and self.provider == LLMProvider.OLLAMA:
             self.base_urls[LLMProvider.OLLAMA] = base_url.rstrip("/")
 
-    @retry(wait=wait_exponential(min=1, max=10), stop=stop_after_attempt(3))
+    # ── Cost tracking ─────────────────────────────────────────────────────────────
+    # USD per 1M tokens (prompt, completion) — approximate, update as needed
+    MODEL_COSTS = {
+        "openai": {
+            "gpt-4o": (2.50, 10.00),
+            "gpt-4o-mini": (0.15, 0.60),
+            "gpt-4-turbo": (10.00, 30.00),
+            "gpt-3.5-turbo": (0.50, 1.50),
+        },
+        "anthropic": {
+            "claude-opus-4-5": (15.00, 75.00),
+            "claude-sonnet-4-5": (3.00, 15.00),
+            "claude-3-haiku-20240307": (0.25, 1.25),
+        },
+        "groq": {
+            "llama-3.3-70b-versatile": (0.59, 0.79),
+            "meta-llama/llama-4-scout-17b-16e-instruct": (0.11, 0.34),
+            "llama-3.1-8b-instant": (0.05, 0.08),
+            "qwen/qwen3-32b": (0.30, 0.30),
+        },
+        "gemini": {
+            "gemini-1.5-pro": (1.25, 5.00),
+            "gemini-1.5-flash": (0.075, 0.30),
+            "gemini-1.0-pro": (0.50, 1.50),
+        },
+        "cohere": {
+            "command-r-plus": (3.00, 15.00),
+            "command-r": (0.50, 1.50),
+        },
+        "openrouter": {
+            "meta-llama/llama-3.1-8b-instruct:free": (0.0, 0.0),
+            "mistralai/mistral-7b-instruct:free": (0.0, 0.0),
+            "google/gemma-2-9b-it:free": (0.0, 0.0),
+            "microsoft/phi-3-mini-128k-instruct:free": (0.0, 0.0),
+        },
+    }
+
+    # ── Energy tracking ────────────────────────────────────────────────────────
+    # Watt-hours per 1M tokens (prompt, completion) — estimates based on model size
+    # Sources: ML CO2 Impact research, datacenter PUE ~1.2, GPU TDP extrapolations
+    # Local Ollama: actual GPU wattage / throughput — estimated ~0.5 Wh/1M tokens
+    MODEL_ENERGY_WH = {
+        "openai": {
+            "gpt-4o":       (3.0,  6.0),   # Large MoE model, shared inference
+            "gpt-4o-mini":  (0.5,  1.0),
+            "gpt-4-turbo":  (4.0,  8.0),
+            "gpt-3.5-turbo":(0.3,  0.6),
+        },
+        "anthropic": {
+            "claude-opus-4-5":       (5.0, 10.0),
+            "claude-sonnet-4-5":     (2.0,  4.0),
+            "claude-3-haiku-20240307":(0.4,  0.8),
+        },
+        "groq": {
+            # Groq LPU is ~10x more efficient than GPU
+            "llama-3.3-70b-versatile":                    (0.4, 0.8),
+            "meta-llama/llama-4-scout-17b-16e-instruct":  (0.15, 0.3),
+            "llama-3.1-8b-instant":                       (0.05, 0.1),
+            "qwen/qwen3-32b":                             (0.2, 0.4),
+        },
+        "gemini": {
+            "gemini-1.5-pro":   (3.5, 7.0),
+            "gemini-1.5-flash":  (0.5, 1.0),
+            "gemini-1.0-pro":    (1.0, 2.0),
+        },
+        "cohere": {
+            "command-r-plus": (3.0, 6.0),
+            "command-r":      (1.0, 2.0),
+        },
+        "openrouter": {
+            "meta-llama/llama-3.1-8b-instruct:free": (0.3, 0.6),
+            "mistralai/mistral-7b-instruct:free":     (0.3, 0.6),
+            "google/gemma-2-9b-it:free":              (0.3, 0.6),
+            "microsoft/phi-3-mini-128k-instruct:free":(0.1, 0.2),
+        },
+        "ollama": {},  # dynamically ~0.5 Wh/1M tokens for local GPU
+    }
+    OLLAMA_ENERGY_WH_PER_1M = (0.5, 0.5)  # conservative local GPU estimate
+
+    def _get_cost_per_million(self) -> tuple[float, float]:
+        """Return (prompt_cost_per_1m, completion_cost_per_1m) for current model."""
+        provider_costs = self.MODEL_COSTS.get(self.provider.value, {})
+        return provider_costs.get(self.model, (0.0, 0.0))
+
+    def _calculate_cost(self, prompt_tokens: int, completion_tokens: int) -> float:
+        prompt_cost_per_1m, completion_cost_per_1m = self._get_cost_per_million()
+        return (prompt_tokens / 1_000_000) * prompt_cost_per_1m + (completion_tokens / 1_000_000) * completion_cost_per_1m
+
+    def _calculate_energy(self, prompt_tokens: int, completion_tokens: int) -> float:
+        """Return estimated energy in Wh for this call."""
+        provider_energy = self.MODEL_ENERGY_WH.get(self.provider.value, {})
+        if self.provider == LLMProvider.OLLAMA:
+            p_wh, c_wh = self.OLLAMA_ENERGY_WH_PER_1M
+        else:
+            p_wh, c_wh = provider_energy.get(self.model, (1.0, 2.0))
+        return (prompt_tokens / 1_000_000) * p_wh + (completion_tokens / 1_000_000) * c_wh
+
+    def _should_retry(self, e: httpx.HTTPStatusError) -> bool:
+        """Determine if an HTTP error should be retried."""
+        status = e.response.status_code
+        # Retry on rate limit (429) and server errors (5xx)
+        return status == 429 or 500 <= status < 600
+
+    async def _complete_with_retry(
+        self,
+        prompt: str,
+        system: Optional[str] = None,
+        json_mode: bool = False,
+    ) -> tuple[str, dict]:
+        """Generate a completion with retry logic. Returns (content, usage_dict)."""
+        dispatcher = {
+            LLMProvider.OPENAI: self._openai_complete,
+            LLMProvider.ANTHROPIC: self._anthropic_complete,
+            LLMProvider.GROQ: self._openai_complete,
+            LLMProvider.GEMINI: self._gemini_complete,
+            LLMProvider.COHERE: self._cohere_complete,
+            LLMProvider.OLLAMA: self._ollama_complete,
+            LLMProvider.OPENROUTER: self._openai_complete,
+        }
+        handler = dispatcher.get(self.provider)
+        if not handler:
+            raise ValueError(f"Unsupported provider: {self.provider}")
+
+        last_exc = None
+        for attempt in range(3):
+            try:
+                content, usage = await handler(prompt, system, json_mode)
+                # Log usage if user_id is available
+                if self.user_id:
+                    usage["energy_wh"] = self._calculate_energy(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+                    usage["cost_usd"] = self._calculate_cost(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+                    _log_usage_background(self.user_id, self.provider.value, self.model, usage)
+                return content, usage
+            except httpx.HTTPStatusError as e:
+                last_exc = e
+                if not self._should_retry(e):
+                    status = e.response.status_code
+                    if status == 401:
+                        raise ValueError(f"LLM authentication failed (401): Invalid API key for {self.provider.value}")
+                    elif status == 403:
+                        raise ValueError(f"LLM access forbidden (403): Check API key permissions for {self.provider.value}")
+                    elif status == 404:
+                        raise ValueError(f"LLM model not found (404): Model '{self.model}' may not exist for {self.provider.value}")
+                    elif status == 422:
+                        raise ValueError(f"LLM request invalid (422): {e.response.text[:200]}")
+                    raise ValueError(f"LLM request failed with HTTP {status}: {e.response.text[:200]}")
+                wait = min(2 ** attempt, 8)
+                await asyncio.sleep(wait)
+            except Exception as e:
+                last_exc = e
+                wait = min(2 ** attempt, 8)
+                await asyncio.sleep(wait)
+
+        if last_exc:
+            if isinstance(last_exc, httpx.HTTPStatusError):
+                status = last_exc.response.status_code
+                raise ValueError(f"LLM request failed after 3 retries (HTTP {status}): {last_exc.response.text[:200]}")
+            raise ValueError(f"LLM request failed after 3 retries: {last_exc}")
+        raise ValueError("LLM request failed: unknown error")
+
     async def complete(
         self,
         prompt: str,
         system: Optional[str] = None,
         json_mode: bool = False,
     ) -> str:
-        """Generate a completion. Returns the text response."""
-        dispatcher = {
-            LLMProvider.OPENAI: self._openai_complete,
-            LLMProvider.ANTHROPIC: self._anthropic_complete,
-            LLMProvider.GROQ: self._openai_complete,   # Groq is OpenAI-compatible
-            LLMProvider.GEMINI: self._gemini_complete,
-            LLMProvider.COHERE: self._cohere_complete,
-            LLMProvider.OLLAMA: self._ollama_complete,
-            LLMProvider.OPENROUTER: self._openai_complete,  # OpenRouter is OpenAI-compatible
-        }
-        handler = dispatcher.get(self.provider)
-        if not handler:
-            raise ValueError(f"Unsupported provider: {self.provider}")
-        return await handler(prompt, system, json_mode)
+        """Generate a completion. Returns the text response (backward compatible)."""
+        content, usage = await self._complete_with_retry(prompt, system, json_mode)
+        if self.user_id:
+            _log_usage_background(self.user_id, self.provider.value, self.model, usage)
+        return content
+
+    async def complete_with_usage(
+        self,
+        prompt: str,
+        system: Optional[str] = None,
+        json_mode: bool = False,
+    ) -> dict:
+        """Generate a completion with token usage info. Returns dict with content and usage."""
+        content, usage = await self._complete_with_retry(prompt, system, json_mode)
+        return {"content": content, "usage": usage}
 
     async def stream_complete(
         self,
@@ -187,7 +349,23 @@ class LLMClient:
             )
             resp.raise_for_status()
             data = resp.json()
-            return data["choices"][0]["message"]["content"]
+            usage = data.get("usage", {})
+            return (
+                data["choices"][0]["message"]["content"],
+                {
+                    "prompt_tokens": usage.get("prompt_tokens", 0),
+                    "completion_tokens": usage.get("completion_tokens", 0),
+                    "total_tokens": usage.get("total_tokens", 0),
+                    "cost_usd": self._calculate_cost(
+                        usage.get("prompt_tokens", 0),
+                        usage.get("completion_tokens", 0),
+                    ),
+                    "energy_wh": self._calculate_energy(
+                        usage.get("prompt_tokens", 0),
+                        usage.get("completion_tokens", 0),
+                    ),
+                },
+            )
 
     async def _openai_stream(self, prompt: str, system: Optional[str], json_mode: bool) -> AsyncGenerator[str, None]:
         messages = [{"role": "system", "content": system}] if system else []
@@ -275,7 +453,23 @@ class LLMClient:
             )
             resp.raise_for_status()
             data = resp.json()
-            return data["content"][0]["text"]
+            usage = data.get("usage", {})
+            return (
+                data["content"][0]["text"],
+                {
+                    "prompt_tokens": usage.get("input_tokens", 0),
+                    "completion_tokens": usage.get("output_tokens", 0),
+                    "total_tokens": usage.get("input_tokens", 0) + usage.get("output_tokens", 0),
+                    "cost_usd": self._calculate_cost(
+                        usage.get("input_tokens", 0),
+                        usage.get("output_tokens", 0),
+                    ),
+                    "energy_wh": self._calculate_energy(
+                        usage.get("input_tokens", 0),
+                        usage.get("output_tokens", 0),
+                    ),
+                },
+            )
 
     async def _anthropic_stream(self, prompt: str, system: Optional[str], json_mode: bool) -> AsyncGenerator[str, None]:
         payload = {
@@ -330,7 +524,19 @@ class LLMClient:
             resp = await client.post(url, json=payload)
             resp.raise_for_status()
             data = resp.json()
-            return data["candidates"][0]["content"]["parts"][0]["text"]
+            usage = data.get("usageMetadata", {})
+            prompt_tokens = usage.get("promptTokenCount", 0)
+            completion_tokens = usage.get("candidatesTokenCount", 0)
+            return (
+                data["candidates"][0]["content"]["parts"][0]["text"],
+                {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": prompt_tokens + completion_tokens,
+                    "cost_usd": self._calculate_cost(prompt_tokens, completion_tokens),
+                    "energy_wh": self._calculate_energy(prompt_tokens, completion_tokens),
+                },
+            )
 
     async def _gemini_stream(self, prompt: str, system: Optional[str], json_mode: bool) -> AsyncGenerator[str, None]:
         payload = {
@@ -385,7 +591,19 @@ class LLMClient:
             resp = await client.post(f"{base}/chat", json=payload, headers=headers)
             resp.raise_for_status()
             data = resp.json()
-            return data["text"]
+            meta = data.get("meta", {}).get("tokens", {})
+            prompt_tokens = meta.get("input_tokens", 0)
+            completion_tokens = meta.get("output_tokens", 0)
+            return (
+                data["text"],
+                {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": prompt_tokens + completion_tokens,
+                    "cost_usd": self._calculate_cost(prompt_tokens, completion_tokens),
+                    "energy_wh": self._calculate_energy(prompt_tokens, completion_tokens),
+                },
+            )
 
     async def _cohere_stream(self, prompt: str, system: Optional[str], json_mode: bool) -> AsyncGenerator[str, None]:
         payload = {
@@ -441,7 +659,18 @@ class LLMClient:
             resp = await client.post(f"{base}/api/chat", json=payload)
             resp.raise_for_status()
             data = resp.json()
-            return data["message"]["content"]
+            prompt_tokens = data.get("prompt_eval_count", 0)
+            completion_tokens = data.get("eval_count", 0)
+            return (
+                data["message"]["content"],
+                {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": prompt_tokens + completion_tokens,
+                    "cost_usd": 0.0,
+                    "energy_wh": self._calculate_energy(prompt_tokens, completion_tokens),
+                },
+            )
 
     async def _ollama_stream(self, prompt: str, system: Optional[str], json_mode: bool) -> AsyncGenerator[str, None]:
         payload = {
@@ -475,11 +704,31 @@ class LLMClient:
         try:
             original_max = self.max_tokens
             self.max_tokens = 10
-            result = await self.complete("Say 'OK' in exactly one word.")
+            # Call the provider handler directly to avoid retry wrapper
+            handler = {
+                LLMProvider.OPENAI: self._openai_complete,
+                LLMProvider.ANTHROPIC: self._anthropic_complete,
+                LLMProvider.GROQ: self._openai_complete,
+                LLMProvider.GEMINI: self._gemini_complete,
+                LLMProvider.COHERE: self._cohere_complete,
+                LLMProvider.OLLAMA: self._ollama_complete,
+                LLMProvider.OPENROUTER: self._openai_complete,
+            }.get(self.provider)
+            if not handler:
+                return {"success": False, "error": f"Unsupported provider: {self.provider}"}
+            result = await handler("Say 'OK' in exactly one word.", None, False)
             self.max_tokens = original_max
+            # Handle both old string return and new tuple return
+            if isinstance(result, tuple):
+                return {"success": True, "response": result[0][:50]}
             return {"success": True, "response": result[:50]}
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            self.max_tokens = original_max if 'original_max' in locals() else 2048
+            error_msg = str(e)
+            if "RetryError" in type(e).__name__:
+                if hasattr(e, 'last_attempt') and e.last_attempt.exception():
+                    error_msg = str(e.last_attempt.exception())
+            return {"success": False, "error": error_msg}
 
 
 async def get_ollama_models(base_url: str = "http://localhost:11434") -> list:
@@ -522,4 +771,41 @@ def build_llm_client_for_user(user, provider: Optional[str] = None, model: Optio
         model=selected_model,
         base_url=user.ollama_base_url if selected_provider == "ollama" else None,
         max_tokens=max_tokens or 2048,
+        user_id=user.id,
     )
+
+
+def _log_usage_background(user_id: str, provider: str, model: str, usage: dict) -> None:
+    """Fire-and-forget usage logging to DB."""
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(_persist_usage(user_id, provider, model, usage))
+    except Exception:
+        pass
+
+
+async def _persist_usage(user_id: str, provider: str, model: str, usage: dict) -> None:
+    """Persist a UsageLog row."""
+    try:
+        from core.database import SessionLocal
+        from models.project import UsageLog
+        db = SessionLocal()
+        try:
+            log = UsageLog(
+                user_id=user_id,
+                provider=provider,
+                model=model,
+                prompt_tokens=str(usage.get("prompt_tokens", 0)),
+                completion_tokens=str(usage.get("completion_tokens", 0)),
+                total_tokens=str(usage.get("total_tokens", 0)),
+                cost_usd=str(round(usage.get("cost_usd", 0.0), 8)),
+                energy_wh=str(round(usage.get("energy_wh", 0.0), 8)),
+            )
+            db.add(log)
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        pass  # Never crash the main request due to logging failure

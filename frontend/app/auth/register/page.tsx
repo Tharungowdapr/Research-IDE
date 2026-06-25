@@ -64,15 +64,15 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)] p-4 relative overflow-hidden">
       <div className="absolute inset-0 bg-mesh" />
-      <div className="absolute top-1/4 left-1/3 w-72 h-72 bg-brand-500/10 rounded-full blur-[128px]" />
-      <div className="absolute bottom-1/4 right-1/3 w-72 h-72 bg-purple-500/10 rounded-full blur-[128px]" />
+      <div className="absolute top-1/4 left-1/3 w-72 h-72 bg-emerald-500/10 rounded-full blur-[128px]" />
+      <div className="absolute bottom-1/4 right-1/3 w-72 h-72 bg-blue-500/10 rounded-full blur-[128px]" />
 
       <div className="relative z-10 w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-600 shadow-lg shadow-brand-600/20 mb-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 shadow-lg shadow-emerald-600/20 mb-4">
             <Brain size={28} className="text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Create account</h1>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]" style={{ fontFamily: 'var(--font-heading)' }}>Create account</h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1">Join ResearchIDE</p>
         </div>
 
@@ -116,7 +116,7 @@ export default function RegisterPage() {
                   required
                 />
                 <button type="button" onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]">
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] transition-colors duration-200 cursor-pointer">
                   {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
@@ -124,7 +124,7 @@ export default function RegisterPage() {
                 <div className="mt-2">
                   <div className="flex gap-1 mb-1">
                     {['weak', 'medium', 'strong'].map((level) => (
-                      <div key={level} className={`h-1 flex-1 rounded-full transition-colors ${
+                      <div key={level} className={`h-1 flex-1 rounded-full transition-colors duration-200 ${
                         passwordStrength === 'weak' && level === 'weak' ? 'bg-red-500' :
                         passwordStrength === 'medium' && ['weak', 'medium'].includes(level) ? 'bg-yellow-500' :
                         passwordStrength === 'strong' ? 'bg-emerald-500' : 'bg-[var(--border)]'
@@ -145,14 +145,14 @@ export default function RegisterPage() {
                   <button
                     key={sl.value} type="button"
                     onClick={() => setForm({ ...form, skill_level: sl.value })}
-                    className={`relative rounded-lg border p-2.5 text-left text-xs transition-all ${
+                    className={`relative rounded-lg border p-2.5 text-left text-xs transition-all duration-200 cursor-pointer ${
                       form.skill_level === sl.value
-                        ? 'border-brand-500 bg-brand-600/10 text-brand-400'
+                        ? 'border-emerald-500 bg-emerald-600/10 text-emerald-400'
                         : 'border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--text-muted)]'
                     }`}
                   >
                     {form.skill_level === sl.value && (
-                      <Check size={10} className="absolute top-1.5 right-1.5 text-brand-400" />
+                      <Check size={10} className="absolute top-1.5 right-1.5 text-emerald-400" />
                     )}
                     <div className="font-medium">{sl.label}</div>
                     <div className="text-[10px] mt-0.5 opacity-70">{sl.desc}</div>
@@ -161,7 +161,7 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <button type="submit" className="btn-primary w-full justify-center" disabled={loading}>
+            <button type="submit" className="btn-primary w-full justify-center cursor-pointer" disabled={loading}>
               {loading ? (
                 <><Loader2 size={14} className="animate-spin" /> Creating account...</>
               ) : (
@@ -173,7 +173,7 @@ export default function RegisterPage() {
           <div className="mt-6 pt-4 border-t border-[var(--border)] text-center">
             <p className="text-xs text-[var(--text-muted)]">
               Already have an account?{' '}
-              <Link href="/auth/login" className="text-brand-400 hover:text-brand-300 font-medium">
+              <Link href="/auth/login" className="text-emerald-400 hover:text-emerald-300 font-medium transition-colors duration-200">
                 Sign in <ArrowRight size={10} className="inline" />
               </Link>
             </p>

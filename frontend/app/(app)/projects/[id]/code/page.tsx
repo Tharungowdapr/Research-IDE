@@ -1,216 +1,140 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Code2, Download, Copy, Check, Loader2, ArrowRight, FileText } from 'lucide-react';
+import { Code2, ArrowRight, Loader2, AlertCircle, Copy, CheckCircle2 } from 'lucide-react';
 import { projectsAPI, agentsAPI } from '@/services/api';
-import { parse } from 'partial-json';
 
 export default function CodePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [codeData, setCodeData] = useState<any>(null);
-  const [activeFile, setActiveFile] = useState(0);
+  const [files, setFiles] = useState<{ path: string; content: string }[]>([]);
+  const [activeFile, setActiveFile] = useState('');
   const [loading, setLoading] = useState(true);
-  const [streaming, setStreaming] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState('');
+  const [copied, setCopied] = useState('');
 
-  const streamContent = useRef('');
-  
   useEffect(() => {
-    projectsAPI.get(id).then((p) => {
-      if (p.outputs?.code) {
-        setCodeData(p.outputs.code);
+    (async () => {
+      try {
+        const p = await projectsAPI.get(id);
+        if (p.outputs?.code) {
+          const c = p.outputs.code;
+          const list = c.file_structure || c.files || (c.code ? [{ path: 'main.py', content: c.code }] : []);
+          if (list.length > 0) {
+            setFiles(list);
+            setActiveFile(list[0].path);
+          }
+        }
+      } catch (e: any) {
+        setError(e.response?.data?.detail || 'Could not load project data');
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    });
+    })();
   }, [id]);
 
-  const handleGenerate = () => {
-    setStreaming(true);
-    agentsAPI.generateCodeStream(
-      id,
-      (chunk) => {
-        streamContent.current += chunk;
-        try {
-          let contentToParse = streamContent.current.trim();
-          if (contentToParse.startsWith("```json")) contentToParse = contentToParse.substring(7);
-          else if (contentToParse.startsWith("```")) contentToParse = contentToParse.substring(3);
-          
-          const partial = parse(contentToParse);
-          if (partial && typeof partial === 'object' && Object.keys(partial).length > 0) {
-            setCodeData(partial);
-          }
-        } catch (e) {}
-      },
-      () => {
-        setStreaming(false);
-        projectsAPI.get(id).then(updated => {
-            if (updated.outputs?.code) setCodeData(updated.outputs.code);
-        });
-      },
-      (err) => {
-        console.error('Code generation failed', err);
-        setStreaming(false);
-      }
-    );
-  };
-
-  const handleCopy = () => {
-    const file = codeData?.files?.[activeFile];
-    if (file) {
-      navigator.clipboard.writeText(file.code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleDownload = () => {
-    if (!codeData?.files) return;
-    // Create a simple text download of all files
-    const content = codeData.files
-      .map((f: any) => `# ===== ${f.filename} =====\n\n${f.code}`)
-      .join('\n\n');
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'research_project_code.txt';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleGenerateReport = async () => {
+  const handleGenerate = async () => {
     setGenerating(true);
+    setError('');
     try {
-      await agentsAPI.generateReport(id);
-      router.push(`/projects/${id}/report`);
-    } catch (e) {
-      console.error(e);
+      const r = await agentsAPI.generateCode(id);
+      const list = r.code?.file_structure || r.code?.files || (r.code?.code ? [{ path: 'main.py', content: r.code.code }] : []);
+      if (list.length > 0) {
+        setFiles(list);
+        setActiveFile(list[0].path);
+      }
+    } catch (e: any) {
+      setError(e.response?.data?.detail || 'Generation failed');
+    } finally {
       setGenerating(false);
     }
   };
 
-  const safeStr = (val: any): string => {
-    if (val === null || val === undefined) return '';
-    if (typeof val === 'string') return val;
-    if (typeof val === 'object') {
-      try { return JSON.stringify(val); } catch { return ''; }
+  const handleCopy = async (path: string) => {
+    const f = files.find(f => f.path === path);
+    if (f?.content) {
+      await navigator.clipboard.writeText(f.content);
+      setCopied(path);
+      setTimeout(() => setCopied(''), 2000);
     }
-    return String(val);
   };
 
-  if (loading) {
-    return (
-      <div className="p-8 flex flex-col items-center justify-center min-h-[400px] gap-3">
-        <Loader2 className="animate-spin text-brand-400" size={24} />
-        <p className="text-sm text-[var(--text-secondary)]">Loading...</p>
-      </div>
-    );
-  }
-
-  if (!codeData && !streaming) {
-    return (
-      <div className="p-8 flex flex-col items-center justify-center min-h-[400px] gap-4">
-        <Code2 size={32} className="text-[var(--text-muted)]" />
-        <p className="text-sm text-[var(--text-secondary)]">No starter code generated yet.</p>
-        <button onClick={handleGenerate} className="btn-primary">
-          Generate Code
-        </button>
-      </div>
-    );
-  }
-
-  if (streaming && !codeData) {
-    return (
-      <div className="p-8 flex flex-col items-center justify-center min-h-[400px] gap-3">
-        <Loader2 className="animate-spin text-brand-400" size={24} />
-        <p className="text-sm text-[var(--text-secondary)]">Generating starter code...</p>
-      </div>
-    );
-  }
-
-  if (!codeData) return null;
-
-  const files = codeData.files || [];
-  const activeFileData = files[activeFile];
+  if (loading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-brand-400" /></div>;
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-[var(--text-primary)]">Generated Code</h1>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">Step 6 of 7 — Starter code for your project</p>
+          <h1 className="text-xl font-bold text-[var(--text-primary)]">Implementation</h1>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">Step 8 of 13 — {files.length > 0 ? 'Generated code for your solution' : 'Generate code from your methodology plan'}</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={handleDownload} disabled={streaming} className="btn-secondary">
-            <Download size={14} /> Download All
+        <div className="flex items-center gap-2">
+          <button onClick={handleGenerate} disabled={generating} className="btn-secondary text-xs">
+            {generating ? <Loader2 size={12} className="animate-spin" /> : <Code2 size={12} />}
+            {generating ? 'Generating...' : files.length > 0 ? 'Regenerate' : 'Generate Code'}
           </button>
-          <button onClick={handleGenerateReport} disabled={generating || streaming} className="btn-primary">
-            {generating || streaming ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
-            {streaming ? 'Generating Code...' : generating ? 'Generating...' : 'Write Paper'}
-          </button>
+          {files.length > 0 && (
+            <button onClick={() => router.push(`/projects/${id}/experiments`)} className="btn-primary">
+              <ArrowRight size={14} /> Experiments
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-12 gap-4">
-        {/* File List */}
-        <div className="col-span-3 space-y-1">
-          <p className="text-xs font-medium text-[var(--text-muted)] px-2 mb-2">Files</p>
-          {files.map((file: any, i: number) => (
-            <button
-              key={i}
-              onClick={() => setActiveFile(i)}
-              className={`w-full text-left rounded-lg px-3 py-2 text-xs transition-all ${
-                activeFile === i
-                  ? 'bg-brand-600/20 text-brand-400 border border-brand-500/30'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-              }`}
-            >
-              <p className="font-mono font-medium">{safeStr(file.filename)}</p>
-              <p className="text-[var(--text-muted)] mt-0.5 truncate">{safeStr(file.description)}</p>
-            </button>
-          ))}
+      {error && <ErrorBanner msg={error} />}
 
-          {/* Setup Instructions */}
-          {codeData.setup_instructions?.length > 0 && (
-            <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] p-3">
-              <p className="text-xs font-medium text-[var(--text-secondary)] mb-2">Setup</p>
-              <ol className="space-y-1">
-                {codeData.setup_instructions.map((step: any, i: number) => (
-                  <li key={i} className="text-xs text-[var(--text-muted)]">{i + 1}. {safeStr(step)}</li>
-                ))}
-              </ol>
-              {codeData.run_command && (
-                <div className="mt-2 rounded bg-[var(--bg-primary)] px-2 py-1.5">
-                  <p className="text-[10px] text-[var(--text-muted)] mb-0.5">Run:</p>
-                  <code className="text-xs text-emerald-400 font-mono">{safeStr(codeData.run_command)}</code>
-                </div>
-              )}
+      {files.length === 0 ? (
+        <div className="card p-12 text-center">
+          <Code2 size={48} className="mx-auto mb-4 text-[var(--text-muted)] opacity-30" />
+          <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">No Code Generated Yet</h2>
+            <p className="text-sm text-[var(--text-muted)] mb-6 max-w-md mx-auto">
+              Click &ldquo;Generate Code&rdquo; to have the AI create implementation files based on your methodology plan, project structure, and research context.
+            </p>
+          <button onClick={handleGenerate} disabled={generating} className="btn-primary">
+            {generating ? <Loader2 size={14} className="animate-spin" /> : <Code2 size={14} />}
+            {generating ? 'Generating...' : 'Generate Code'}
+          </button>
+        </div>
+      ) : (
+        <div className="flex gap-4">
+          {files.length > 1 && (
+            <div className="w-48 flex-shrink-0 space-y-1">
+              {files.map((f) => (
+                <button
+                  key={f.path}
+                  onClick={() => setActiveFile(f.path)}
+                  className={`w-full text-left text-xs px-3 py-2 rounded-md transition-all ${
+                    activeFile === f.path ? 'bg-brand-600/20 text-brand-400' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                  }`}
+                >
+                  <Code2 size={10} className="inline mr-1.5" />{f.path.split('/').pop()}
+                </button>
+              ))}
             </div>
           )}
-        </div>
-
-        {/* Code View */}
-        <div className="col-span-9">
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] overflow-hidden">
-            {/* Code Header */}
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border)] bg-[var(--bg-card)]">
-              <span className="text-xs font-mono text-[var(--text-secondary)]">
-                {safeStr(activeFileData?.filename)}
-              </span>
-              <button onClick={handleCopy} className="btn-ghost text-xs py-1 px-2">
-                {copied ? <><Check size={12} className="text-emerald-400" /> Copied</> : <><Copy size={12} /> Copy</>}
+          <div className="flex-1 card p-0 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border)] bg-[var(--bg-secondary)]">
+              <span className="text-xs font-mono text-[var(--text-muted)]">{activeFile}</span>
+              <button onClick={() => handleCopy(activeFile)} className="text-[10px] text-[var(--text-muted)] hover:text-brand-400">
+                {copied === activeFile ? <><CheckCircle2 size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
               </button>
             </div>
-            {/* Code Content */}
-            <pre className="p-4 overflow-auto max-h-[600px] text-xs font-mono text-[var(--text-secondary)] leading-relaxed">
-              <code>{safeStr(activeFileData?.code || '')}</code>
+            <pre className="p-4 text-xs text-[var(--text-secondary)] overflow-auto max-h-[600px] leading-relaxed font-mono">
+              {String(files.find(f => f.path === activeFile)?.content || '// No code generated')}
             </pre>
           </div>
         </div>
-      </div>
+      )}
+    </div>
+  );
+}
+
+function ErrorBanner({ msg }: any) {
+  return (
+    <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400 flex items-center gap-2">
+      <AlertCircle size={14} /> {String(msg)}
     </div>
   );
 }

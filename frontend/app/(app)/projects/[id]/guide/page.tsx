@@ -19,11 +19,17 @@ export default function GuidePage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    projectsAPI.get(id).then((p) => {
-      if (p.outputs?.guide) setGuide(p.outputs.guide);
-      if (p.outputs?.presentation) setSlides(p.outputs.presentation?.slides || null);
-      setLoading(false);
-    });
+    (async () => {
+      try {
+        const p = await projectsAPI.get(id);
+        if (p.outputs?.guide) setGuide(p.outputs.guide);
+        if (p.outputs?.presentation) setSlides(p.outputs.presentation?.slides || null);
+      } catch (e: any) {
+        setError(e.response?.data?.detail || 'Failed to load project');
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [id]);
 
   const handleGenerate = async () => {
@@ -75,7 +81,7 @@ export default function GuidePage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-[var(--text-primary)]">Research Guide</h1>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">Step 6 of 7 — Methodology, tools, and presentation</p>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">Step 11 of 13 — Methodology, tools, and presentation</p>
         </div>
         <div className="flex gap-2">
           {!guide && (
@@ -96,7 +102,7 @@ export default function GuidePage() {
 
       {error && (
         <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400 flex gap-2">
-          <AlertCircle size={14} className="flex-shrink-0 mt-0.5" /> {error}
+          <AlertCircle size={14} className="flex-shrink-0 mt-0.5" /> {String(error)}
         </div>
       )}
 

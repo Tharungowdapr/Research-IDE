@@ -3,33 +3,33 @@
 @tailwind utilities;
 
 :root {
-  --bg-primary: #0a0a0f;
-  --bg-secondary: #111118;
-  --bg-card: #181825;
-  --bg-hover: #1e1e2e;
-  --bg-surface: #13131e;
-  --bg-elevated: #1c1c2e;
-  --border: #252538;
-  --border-light: #2e2e45;
-  --text-primary: #e8e8f0;
-  --text-secondary: #8888a8;
-  --text-muted: #55556a;
-  --accent: #6366f1;
-  --accent-light: #818cf8;
-  --accent-dark: #4f46e5;
-  --accent-glow: rgba(99, 102, 241, 0.15);
-  --accent-glow-strong: rgba(99, 102, 241, 0.3);
-  --success: #10b981;
-  --success-bg: rgba(16, 185, 129, 0.1);
-  --warning: #f59e0b;
+  --bg-primary: #0B1120;
+  --bg-secondary: #111827;
+  --bg-card: #1F2937;
+  --bg-hover: #374151;
+  --bg-surface: #0F172A;
+  --bg-elevated: #1E293B;
+  --border: #1E3A5F;
+  --border-light: #334155;
+  --text-primary: #F8FAFC;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --accent: #22C55E;
+  --accent-light: #4ADE80;
+  --accent-dark: #16A34A;
+  --accent-glow: rgba(34, 197, 94, 0.15);
+  --accent-glow-strong: rgba(34, 197, 94, 0.3);
+  --success: #22C55E;
+  --success-bg: rgba(34, 197, 94, 0.1);
+  --warning: #F59E0B;
   --warning-bg: rgba(245, 158, 11, 0.1);
-  --danger: #ef4444;
+  --danger: #EF4444;
   --danger-bg: rgba(239, 68, 68, 0.1);
-  --info: #3b82f6;
+  --info: #3B82F6;
   --info-bg: rgba(59, 130, 246, 0.1);
-  --gradient-1: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
-  --gradient-2: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
-  --gradient-3: linear-gradient(135deg, #10b981 0%, #6366f1 100%);
+  --gradient-1: linear-gradient(135deg, #22C55E 0%, #16A34A 50%, #15803D 100%);
+  --gradient-2: linear-gradient(135deg, #3B82F6 0%, #22C55E 100%);
+  --gradient-3: linear-gradient(135deg, #22C55E 0%, #3B82F6 100%);
   --sidebar-width: 240px;
   --header-height: 0px;
 }
@@ -39,9 +39,13 @@
 body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  font-family: var(--font-inter), system-ui, sans-serif;
+  font-family: var(--font-body), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading), var(--font-body), system-ui, sans-serif;
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -72,39 +76,39 @@ body {
   }
 
   .btn-primary {
-    @apply inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white
-      hover:bg-brand-500 active:bg-brand-700 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
-      shadow-lg shadow-brand-600/20;
+    @apply inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white
+      hover:bg-emerald-500 active:bg-emerald-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed
+      shadow-lg shadow-emerald-600/20 cursor-pointer;
   }
   .btn-primary:hover {
-    @apply shadow-brand-600/30;
+    @apply shadow-emerald-600/30;
   }
 
   .btn-secondary {
     @apply inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)]
       px-4 py-2 text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] hover:border-[var(--border-light)]
-      transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+      transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer;
   }
 
   .btn-ghost {
     @apply inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[var(--text-secondary)]
-      hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-all duration-150;
+      hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-all duration-200 cursor-pointer;
   }
 
   .btn-ghost-destructive {
     @apply inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[var(--text-muted)]
-      hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] transition-all duration-150;
+      hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] transition-all duration-200 cursor-pointer;
   }
 
   .btn-icon {
     @apply flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-muted)]
-      hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-all duration-150;
+      hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-all duration-200 cursor-pointer;
   }
 
   .input {
-    @apply w-full rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2
+    @apply w-full rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2.5
       text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
-      focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all;
+      focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all;
   }
 
   .input-error {
@@ -115,7 +119,7 @@ body {
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
   }
 
-  .badge-brand  { @apply badge bg-brand-500/10 text-brand-400 border border-brand-500/20; }
+  .badge-brand  { @apply badge bg-emerald-500/10 text-emerald-400 border border-emerald-500/20; }
   .badge-blue   { @apply badge bg-blue-500/10 text-blue-400 border border-blue-500/20; }
   .badge-green  { @apply badge bg-emerald-500/10 text-emerald-400 border border-emerald-500/20; }
   .badge-yellow { @apply badge bg-yellow-500/10 text-yellow-400 border border-yellow-500/20; }
@@ -127,7 +131,7 @@ body {
       hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-all cursor-pointer;
   }
   .sidebar-item.active {
-    @apply bg-brand-600/20 text-brand-400;
+    @apply bg-emerald-600/20 text-emerald-400;
   }
 
   .tab-item {
@@ -135,7 +139,7 @@ body {
       hover:text-[var(--text-secondary)] hover:border-[var(--border)] transition-all cursor-pointer;
   }
   .tab-item.active {
-    @apply text-brand-400 border-brand-500;
+    @apply text-emerald-400 border-emerald-500;
   }
 
   .code-block {
@@ -166,15 +170,15 @@ body {
 
 @layer utilities {
   .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-brand-400 via-purple-400 to-pink-400;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 via-green-300 to-teal-400;
   }
   .text-gradient-2 {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-brand-400;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400;
   }
   .bg-mesh {
-    background-image: radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
-                     radial-gradient(circle at 80% 20%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
-                     radial-gradient(circle at 40% 80%, rgba(14, 165, 233, 0.06) 0%, transparent 50%);
+    background-image: radial-gradient(circle at 20% 50%, rgba(34, 197, 94, 0.08) 0%, transparent 50%),
+                     radial-gradient(circle at 80% 20%, rgba(59, 130, 246, 0.06) 0%, transparent 50%),
+                     radial-gradient(circle at 40% 80%, rgba(16, 185, 129, 0.06) 0%, transparent 50%);
   }
   .bg-grid {
     background-image:
@@ -229,4 +233,11 @@ body {
   background: linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent);
   background-size: 200% 100%;
   animation: shimmer 3s infinite;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  :root {
+    --sidebar-width: 0px;
+  }
 }

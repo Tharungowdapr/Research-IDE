@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
-  Search, ArrowRight, Loader2, AlertCircle, TrendingUp, Lightbulb,
+  Search, ArrowRight, Loader2, AlertCircle, TrendingUp, Lightbulb, Target,
 } from 'lucide-react';
 import { projectsAPI, agentsAPI } from '@/services/api';
 import { showToast } from '@/components/ErrorToast';
@@ -81,16 +81,8 @@ export default function GapsPage() {
     handleAnalyzeGaps(true);
   };
 
-  const handleGenerateIdeas = async () => {
-    setGenerating(true);
-    setError('');
-    try {
-      await agentsAPI.generateIdeas(id);
-      router.push(`/projects/${id}/ideas`);
-    } catch (e: any) {
-      setError(e.response?.data?.detail || 'Idea generation failed.');
-      setGenerating(false);
-    }
+  const handleProceedToIdeas = () => {
+    router.push(`/projects/${id}/ideas`);
   };
 
   if (loading) return (
@@ -105,11 +97,10 @@ export default function GapsPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-[var(--text-primary)]">Gap Analysis</h1>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">Step 3 of 7 — {gaps.length} gaps identified</p>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">Step 3 of 13 — {gaps.length} gaps identified</p>
         </div>
-        <button onClick={handleGenerateIdeas} disabled={generating || gaps.length === 0} className="btn-primary">
-          {generating ? <Loader2 size={14} className="animate-spin" /> : <Lightbulb size={14} />}
-          {generating ? 'Generating ideas...' : 'Generate Ideas'}
+        <button onClick={handleProceedToIdeas} disabled={gaps.length === 0} className="btn-primary">
+          <Lightbulb size={14} /> Proceed to Research Ideas
         </button>
       </div>
 
@@ -117,7 +108,7 @@ export default function GapsPage() {
         <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">
           <div className="flex items-center gap-2 mb-2">
             <AlertCircle size={14} /> 
-            <span>{error}</span>
+            <span>{String(error)}</span>
           </div>
           <button 
             onClick={handleRetry}

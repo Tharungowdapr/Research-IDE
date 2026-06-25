@@ -10,11 +10,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Dict
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from core.database import get_db
 from core.security import get_current_user, encrypt_api_key
 from core.llm_client import (
     PROVIDER_MODELS,
+    PROVIDER_DEFAULTS,
     get_ollama_models,
     LLMClient,
     LLMProvider,
@@ -46,6 +48,84 @@ class TestConnectionRequest(BaseModel):
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+
+@router.get("/usage")
+async def get_usage_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return aggregated token usage and cost stats for the current user."""
+    from models.project import UsageLog
+    from sqlalchemy import func
+
+    logs = db.query(UsageLog).filter(UsageLog.user_id == current_user.id).all()
+
+    total_tokens = sum(int(l.total_tokens or 0) for l in logs)
+    total_cost = sum(float(l.cost_usd or 0) for l in logs)
+    total_prompt = sum(int(l.prompt_tokens or 0) for l in logs)
+    total_completion = sum(int(l.completion_tokens or 0) for l in logs)
+    total_energy = sum(float(l.energy_wh or 0) for l in logs)
+
+    # Per-provider breakdown
+    by_provider: dict = {}
+    for l in logs:
+        p = l.provider
+        if p not in by_provider:
+            by_provider[p] = {"tokens": 0, "cost_usd": 0.0, "energy_wh": 0.0, "calls": 0}
+        by_provider[p]["tokens"] += int(l.total_tokens or 0)
+        by_provider[p]["cost_usd"] += float(l.cost_usd or 0)
+        by_provider[p]["energy_wh"] += float(l.energy_wh or 0)
+        by_provider[p]["calls"] += 1
+
+    # Per-model breakdown
+    by_model: dict = {}
+    for l in logs:
+        key = f"{l.provider}/{l.model}"
+        if key not in by_model:
+            by_model[key] = {"provider": l.provider, "model": l.model, "tokens": 0, "cost_usd": 0.0, "energy_wh": 0.0, "calls": 0}
+        by_model[key]["tokens"] += int(l.total_tokens or 0)
+        by_model[key]["cost_usd"] += float(l.cost_usd or 0)
+        by_model[key]["energy_wh"] += float(l.energy_wh or 0)
+        by_model[key]["calls"] += 1
+
+    # Recent calls (last 10)
+    recent = sorted(logs, key=lambda l: l.created_at, reverse=True)[:10]
+    recent_list = [
+        {
+            "provider": l.provider,
+            "model": l.model,
+            "total_tokens": int(l.total_tokens or 0),
+            "cost_usd": float(l.cost_usd or 0),
+            "energy_wh": float(l.energy_wh or 0),
+            "created_at": l.created_at.isoformat(),
+        }
+        for l in recent
+    ]
+
+    return {
+        "total_tokens": total_tokens,
+        "prompt_tokens": total_prompt,
+        "completion_tokens": total_completion,
+        "total_cost_usd": round(total_cost, 6),
+        "total_energy_wh": round(total_energy, 6),
+        "total_calls": len(logs),
+        "by_provider": by_provider,
+        "by_model": list(by_model.values()),
+        "recent": recent_list,
+    }
+
+
+@router.delete("/usage")
+async def reset_usage_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Reset all usage logs for the current user."""
+    from models.project import UsageLog
+    db.query(UsageLog).filter(UsageLog.user_id == current_user.id).delete()
+    db.commit()
+    return {"message": "Usage stats reset"}
+
 
 @router.get("/providers")
 async def list_providers():
@@ -134,9 +214,11 @@ async def save_api_key(
         raise HTTPException(status_code=400, detail="Unknown provider")
 
     encrypted = encrypt_api_key(body.api_key)
-    keys = current_user.llm_api_keys or {}
+    # Use a fresh dict copy so SQLAlchemy always detects the change
+    keys = dict(current_user.llm_api_keys or {})
     keys[body.provider] = encrypted
     current_user.llm_api_keys = keys
+    flag_modified(current_user, "llm_api_keys")
     db.commit()
 
     return {"message": f"API key for {body.provider} saved successfully"}
@@ -149,9 +231,10 @@ async def delete_api_key(
     db: Session = Depends(get_db),
 ):
     """Remove a stored API key."""
-    keys = current_user.llm_api_keys or {}
+    keys = dict(current_user.llm_api_keys or {})
     keys.pop(provider, None)
     current_user.llm_api_keys = keys
+    flag_modified(current_user, "llm_api_keys")
     db.commit()
     return {"message": f"API key for {provider} removed"}
 
@@ -198,12 +281,16 @@ async def test_llm_connection(
         if body.provider in stored_keys:
             api_key = decrypt_api_key(stored_keys[body.provider])
 
+    # Resolve model: use provided model, then provider default (NOT user preferred —
+    # user's stored preferred model may belong to a different provider or be deprecated)
+    model = body.model or PROVIDER_DEFAULTS.get(LLMProvider(body.provider)) if body.provider != "ollama" else body.model
+
     ollama_url = body.ollama_base_url or current_user.ollama_base_url or "http://localhost:11434"
 
     client = LLMClient(
         provider=body.provider,
         api_key=api_key,
-        model=body.model,
+        model=model,
         base_url=ollama_url if body.provider == "ollama" else None,
     )
 

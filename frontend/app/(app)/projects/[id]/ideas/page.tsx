@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Lightbulb, Star, Zap, ArrowRight, Loader2, CheckCircle2,
-  Clock, BarChart2, AlertCircle,
+  Clock, BarChart2, AlertCircle, Sparkles,
 } from 'lucide-react';
 import { projectsAPI, agentsAPI } from '@/services/api';
 
@@ -39,22 +39,43 @@ export default function IdeasPage() {
 
   const [ideas, setIdeas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
   const [selecting, setSelecting] = useState<number | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    projectsAPI.get(id).then((p) => {
-      setIdeas(p.outputs?.ideas?.ideas || []);
-      setLoading(false);
-    });
+    (async () => {
+      try {
+        const p = await projectsAPI.get(id);
+        setIdeas(p.outputs?.ideas?.ideas || []);
+      } catch (e: any) {
+        setError(e.response?.data?.detail || 'Failed to load project');
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [id]);
+
+  const handleGenerateIdeas = async () => {
+    setGenerating(true);
+    setError('');
+    try {
+      await agentsAPI.generateIdeas(id);
+      const p = await projectsAPI.get(id);
+      setIdeas(p.outputs?.ideas?.ideas || []);
+    } catch (e: any) {
+      setError(e.response?.data?.detail || 'Failed to generate ideas.');
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const handleSelectIdea = async (index: number) => {
     setSelecting(index);
     setError('');
     try {
       await agentsAPI.selectIdea(id, index);
-      router.push(`/projects/${id}/planner`);
+      router.push(`/projects/${id}/objectives`);
     } catch (e: any) {
       setError(e.response?.data?.detail || 'Failed to select idea.');
       setSelecting(null);
@@ -68,20 +89,45 @@ export default function IdeasPage() {
       <div className="mb-6">
         <h1 className="text-xl font-bold text-[var(--text-primary)]">Research Ideas</h1>
         <p className="text-xs text-[var(--text-muted)] mt-0.5">
-          Step 4 of 7 — {ideas.length} ideas generated, ranked by novelty × feasibility
+          Step 4 of 13 — {ideas.length} ideas generated, ranked by novelty × feasibility
         </p>
+      </div>
+
+      <div className="flex items-center gap-2 mb-4">
+        {ideas.length > 0 && (
+          <button onClick={handleGenerateIdeas} disabled={generating} className="btn-secondary">
+            {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+            {generating ? 'Regenerating...' : 'Regenerate'}
+          </button>
+        )}
       </div>
 
       {error && (
         <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400 flex items-center gap-2">
-          <AlertCircle size={14} /> {error}
+          <AlertCircle size={14} /> {String(error)}
         </div>
       )}
 
-      {ideas.length === 0 ? (
+      {ideas.length === 0 && !generating && error && (
+        <div className="card text-center py-16">
+          <AlertCircle size={32} className="mx-auto mb-3 text-red-400" />
+          <p className="text-sm text-[var(--text-secondary)]">Failed to generate ideas</p>
+          <p className="text-xs text-[var(--text-muted)] mt-1">{String(error)}</p>
+          <button onClick={handleGenerateIdeas} className="btn-primary mt-4">
+            <Sparkles size={14} /> Try Again
+          </button>
+        </div>
+      )}
+
+      {ideas.length === 0 && !error ? (
         <div className="card text-center py-16">
           <Lightbulb size={32} className="mx-auto mb-3 text-[var(--text-muted)]" />
-          <p className="text-sm text-[var(--text-secondary)]">No ideas yet — run gap analysis first</p>
+          <p className="text-sm text-[var(--text-secondary)]">No ideas generated yet</p>
+          <p className="text-xs text-[var(--text-muted)] mt-1">Generate research ideas from your gap analysis</p>
+          <button onClick={handleGenerateIdeas} disabled={generating} className="btn-primary mt-4">
+            {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+            {generating ? 'Generating Ideas...' : 'Generate Ideas'}
+          </button>
         </div>
       ) : (
         <div className="space-y-5">

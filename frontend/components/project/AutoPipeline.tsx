@@ -6,17 +6,22 @@ import { Play, Loader2, CheckCircle2, AlertCircle, Clock, ArrowRight } from 'luc
 import { pipelineAPI } from '@/services/api';
 
 const STAGE_LABELS: Record<string, string> = {
-  intent: 'Intent Extraction',
-  papers: 'Paper Retrieval',
-  gaps: 'Gap Analysis',
-  ideas: 'Idea Generation',
-  select_idea: 'Select Best Idea',
-  planner: 'Execution Plan',
+  analysis: 'NLP Analysis',
+  papers: 'Literature Review',
+  gaps: 'Research Gap',
+  ideas: 'Research Ideas',
+  objectives: 'SMART Objectives',
+  planner: 'Methodology',
+  data: 'Data Pipeline',
+  code: 'Implementation',
+  experiments: 'Experiments',
+  results: 'Results Analysis',
   guide: 'Research Guide',
-  report: 'Research Paper',
+  report: 'Paper Writing',
+  publish: 'Review & Publish',
 };
 
-const STAGE_ORDER = ['intent', 'papers', 'gaps', 'ideas', 'select_idea', 'planner', 'guide', 'report'];
+const STAGE_ORDER = ['analysis', 'papers', 'gaps', 'ideas', 'objectives', 'planner', 'data', 'code', 'experiments', 'results', 'guide', 'report', 'publish'];
 
 export default function AutoPipeline({ projectId }: { projectId: string }) {
   const router = useRouter();
@@ -31,7 +36,7 @@ export default function AutoPipeline({ projectId }: { projectId: string }) {
 
     const initial: Record<string, 'pending' | 'running' | 'done' | 'error'> = {};
     STAGE_ORDER.forEach((s) => (initial[s] = 'pending'));
-    initial.intent = 'running';
+    initial.analysis = 'running';
     setStages(initial);
 
     pipelineAPI.runFullPipeline(
@@ -71,7 +76,7 @@ export default function AutoPipeline({ projectId }: { projectId: string }) {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="font-semibold text-sm text-[var(--text-primary)]">Auto Pipeline</h3>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">Run all 7 steps automatically</p>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">Run all 13 steps automatically</p>
         </div>
         <button
           onClick={handleRunFull}
@@ -125,10 +130,10 @@ export default function AutoPipeline({ projectId }: { projectId: string }) {
         })}
       </div>
 
-      {!running && stages.complete === 'done' && (
+      {!running && STAGE_ORDER.every((s) => stages[s] === 'done') && (
         <div className="mt-4 flex justify-end">
-          <button onClick={() => router.push(`/projects/${projectId}/report`)} className="btn-primary text-xs">
-            View Report <ArrowRight size={12} />
+          <button onClick={() => router.push(`/projects/${projectId}/publish`)} className="btn-primary text-xs">
+            View Final Step <ArrowRight size={12} />
           </button>
         </div>
       )}

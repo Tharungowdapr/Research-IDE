@@ -91,6 +91,9 @@ export const projectsAPI = {
 
 // ── Pipeline ──────────────────────────────────────────────────────────────────
 export const pipelineAPI = {
+  analyzeNLP: (projectId: string, text?: string) =>
+    api.post('/pipeline/analyze', { project_id: projectId, text }).then((r) => r.data),
+
   extractIntent: (projectId: string, text?: string) =>
     api.post('/pipeline/intent', { project_id: projectId, text }).then((r) => r.data),
 
@@ -129,11 +132,6 @@ export const agentsAPI = {
   analyzeGaps: (projectId: string) =>
     api.post('/agents/analyze-gaps', { project_id: projectId }).then((r) => r.data),
 
-  generateIdeas: (projectId: string) =>
-    api.post('/agents/generate-ideas', { project_id: projectId }).then((r) => r.data),
-
-  selectIdea: (projectId: string, ideaIndex: number) =>
-    api.post('/agents/select-idea', { project_id: projectId, idea_index: ideaIndex }).then((r) => r.data),
 
   createPlan: (projectId: string) =>
     api.post('/agents/plan', { project_id: projectId }).then((r) => r.data),
@@ -206,6 +204,30 @@ export const agentsAPI = {
     });
   },
 
+  generateCode: (projectId: string) =>
+    api.post('/agents/generate-code', { project_id: projectId }).then((r) => r.data),
+
+  generateIdeas: (projectId: string) =>
+    api.post('/agents/generate-ideas', { project_id: projectId }).then((r) => r.data),
+
+  selectIdea: (projectId: string, index: number) =>
+    api.post('/agents/select-idea', { project_id: projectId, idea_index: index }).then((r) => r.data),
+
+  generateObjectives: (projectId: string) =>
+    api.post('/agents/generate-objectives', { project_id: projectId }).then((r) => r.data),
+
+  generateDataPlan: (projectId: string) =>
+    api.post('/agents/generate-data-plan', { project_id: projectId }).then((r) => r.data),
+
+  generateExperiments: (projectId: string) =>
+    api.post('/agents/generate-experiments', { project_id: projectId }).then((r) => r.data),
+
+  generateAnalysis: (projectId: string) =>
+    api.post('/agents/generate-analysis', { project_id: projectId }).then((r) => r.data),
+
+  generateReview: (projectId: string) =>
+    api.post('/agents/generate-review', { project_id: projectId }).then((r) => r.data),
+
   generateGuide: (projectId: string) =>
     api.post('/agents/generate-guide', { project_id: projectId }).then((r) => r.data),
 
@@ -238,6 +260,10 @@ export const llmAPI = {
 
   testConnection: (data: { provider: string; model?: string; api_key?: string; ollama_base_url?: string }) =>
     api.post('/llm/test', data).then((r) => r.data),
+
+  getUsage: () => api.get('/llm/usage').then((r) => r.data),
+
+  resetUsage: () => api.delete('/llm/usage').then((r) => r.data),
 };
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
@@ -271,3 +297,27 @@ export const chatAPI = {
 };
 
 export default api;
+
+// ── System Monitor ────────────────────────────────────────────────────────────
+export const systemAPI = {
+  snapshot: () => api.get('/system/snapshot').then((r) => r.data),
+
+  stream: (onData: (data: any) => void, onError?: (e: any) => void): (() => void) => {
+    let token = '';
+    try {
+      const stored = localStorage.getItem('research-ide-auth');
+      if (stored) token = JSON.parse(stored)?.state?.accessToken || '';
+    } catch {}
+
+    const ctrl = new AbortController();
+    fetchEventSource(`${API_URL}/api/system/stream`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: ctrl.signal,
+      onmessage(ev) {
+        try { onData(JSON.parse(ev.data)); } catch {}
+      },
+      onerror(err) { onError?.(err); throw err; },
+    });
+    return () => ctrl.abort();
+  },
+};

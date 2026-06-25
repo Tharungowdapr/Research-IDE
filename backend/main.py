@@ -9,9 +9,10 @@ from fastapi.responses import JSONResponse
 import uvicorn
 import time
 
-from api.routes import auth, project, pipeline, agents, llm_config, export, zotero, plugins
+from api.routes import auth, project, pipeline, agents, llm_config, export, zotero, plugins, system
 from core.database import Base, engine
 from core.config import settings
+import models.project  # ensure UsageLog and all models are registered with Base
 
 # Create all database tables
 Base.metadata.create_all(bind=engine)
@@ -59,6 +60,7 @@ app.include_router(llm_config.router, prefix="/api/llm", tags=["LLM Configuratio
 app.include_router(export.router, prefix="/api/export", tags=["Export"])
 app.include_router(zotero.router, prefix="/api/zotero", tags=["Zotero Integration"])
 app.include_router(plugins.router, prefix="/api/plugins", tags=["Plugin System"])
+app.include_router(system.router, prefix="/api/system", tags=["System Monitor"])
 
 @app.get("/api/health", tags=["Health"])
 async def health_check():

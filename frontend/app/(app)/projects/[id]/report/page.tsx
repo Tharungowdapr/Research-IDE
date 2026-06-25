@@ -1,36 +1,46 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useParams } from 'next/navigation';
-import { FileText, Download, Loader2, BookOpen, Tag, ChevronDown } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
+import { FileText, Download, Loader2, BookOpen, Tag, ChevronDown, AlertCircle, ArrowRight } from 'lucide-react';
 import { projectsAPI, agentsAPI } from '@/services/api';
 import { useAuthStore } from '@/store/useAuthStore';
 
 export default function ReportPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState('');
   const [activeSection, setActiveSection] = useState(0);
   const [showToc, setShowToc] = useState(false);
   const [downloading, setDownloading] = useState<'docx' | 'pdf' | 'md' | null>(null);
   const tocRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    projectsAPI.get(id).then((p) => {
-      if (p.outputs?.report) setReport(p.outputs.report);
-      setLoading(false);
-    });
+    (async () => {
+      try {
+        const p = await projectsAPI.get(id);
+        if (p.outputs?.report) setReport(p.outputs.report);
+      } catch (e: any) {
+        setError(e.response?.data?.detail || 'Failed to load project');
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [id]);
 
   const handleGenerate = async () => {
-    setLoading(true);
+    setGenerating(true);
+    setError('');
     try {
       const r = await agentsAPI.generateReport(id);
       setReport(r.report);
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setError(e.response?.data?.detail || 'Report generation failed.');
     }
-    setLoading(false);
+    setGenerating(false);
   };
 
   const handleDownload = async (format: 'docx' | 'pdf' | 'md') => {
@@ -103,12 +113,15 @@ export default function ReportPage() {
 
   if (!report) {
     return (
-      <div className="p-8 flex flex-col items-center justify-center min-h-[400px] gap-4">
-        <FileText size={32} className="text-[var(--text-muted)]" />
-        <p className="text-sm text-[var(--text-secondary)]">No research paper generated yet.</p>
-        <button onClick={handleGenerate} className="btn-primary">
-          Generate Report
-        </button>
+      <div className="p-8 max-w-6xl mx-auto">
+        {error && <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400 flex items-center gap-2"><AlertCircle size={14} /> {String(error)}</div>}
+        <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+          <FileText size={32} className="text-[var(--text-muted)]" />
+          <p className="text-sm text-[var(--text-secondary)]">No research paper generated yet.</p>
+          <button onClick={handleGenerate} disabled={generating} className="btn-primary">
+            {generating ? <><Loader2 size={14} className="animate-spin" /> Generating...</> : 'Generate Report'}
+          </button>
+        </div>
       </div>
     );
   }
@@ -132,7 +145,7 @@ export default function ReportPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-[var(--text-primary)]">Research Paper</h1>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">Step 7 of 7 — Complete</p>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">Step 12 of 13 — Complete</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -278,6 +291,16 @@ export default function ReportPage() {
             </ol>
           </div>
         )}
+      </div>
+
+      {/* Proceed to Publish */}
+      <div className="mt-6 flex justify-center">
+        <button
+          onClick={() => router.push(`/projects/${id}/publish`)}
+          className="btn-primary"
+        >
+          Proceed to Review & Publish <ArrowRight size={14} />
+        </button>
       </div>
     </div>
   );

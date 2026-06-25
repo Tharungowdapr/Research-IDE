@@ -109,7 +109,7 @@ async def run_idea_generation(
         # Round 1: Generate 10 ideas
         ideas = await _round1_generate(domain, problem, constraints, gaps_summary, papers_summary, llm)
         if not ideas:
-            return _fallback_ideas(gaps, intent)
+            raise ValueError("Idea generation failed: LLM returned no ideas")
 
         # Round 2: Critique
         try:
@@ -178,7 +178,7 @@ async def run_idea_generation(
 
     except Exception as e:
         print(f"Idea generation error: {e}")
-        return _fallback_ideas(gaps, intent)
+        raise ValueError(f"Idea generation failed: {e}") from e
 
 
 async def _round1_generate(domain, problem, constraints, gaps_summary, papers_summary, llm):
@@ -251,28 +251,3 @@ def _parse_json_list(raw: str) -> List[Dict]:
             return v
     return []
 
-
-def _fallback_ideas(gaps: List[Dict], intent: Dict) -> List[Dict]:
-    return [
-        {
-            "title": f"Novel approach addressing {g.get('title', 'research gap')}",
-            "description": f"Develop a new approach that addresses: {g.get('description', '')[:200]}",
-            "novelty": "Addresses an identified gap in the literature",
-            "approach": "Literature-driven methodology development",
-            "addresses_gaps": [g.get("title", "")],
-            "related_papers": g.get("supporting_papers", []),
-            "suggested_datasets": [],
-            "suggested_methods": [],
-            "feasibility": "medium",
-            "expected_impact": "medium",
-            "novelty_score": 6.0,
-            "feasibility_score": 5.0,
-            "time_estimate": "3-6 months",
-            "difficulty": "intermediate",
-            "assumptions": ["Standard compute available", "Public datasets exist", "Method generalizes"],
-            "failure_modes": ["Data may not be sufficient", "Approach may not scale"],
-            "survived_critique": False,
-            "critique_summary": "Critique unavailable — fallback idea",
-        }
-        for g in gaps[:3]
-    ]

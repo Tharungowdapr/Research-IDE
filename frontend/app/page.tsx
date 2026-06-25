@@ -7,16 +7,23 @@ import {
   Brain, BookOpen, Search, Lightbulb, Cpu, BookOpenCheck,
   FileText, ArrowRight, ChevronDown, Menu, X, Github,
   Star, Users, FileCode2, Sparkles, Layers, Zap,
+  Target, Database, Code2, FlaskConical, BarChart3, CheckCircle2,
 } from 'lucide-react';
 
 const STEPS = [
-  { icon: Brain, label: 'NLP Analysis', desc: 'Extract research intent and key concepts from your problem statement using LLMs.', color: 'from-blue-500 to-indigo-500' },
-  { icon: BookOpen, label: 'Paper Explorer', desc: 'Automatically retrieve and analyze relevant papers from multiple sources.', color: 'from-indigo-500 to-purple-500' },
-  { icon: Search, label: 'Gap Analysis', desc: 'Identify research gaps and under-explored areas with AI-powered literature analysis.', color: 'from-purple-500 to-pink-500' },
-  { icon: Lightbulb, label: 'Idea Generation', desc: 'Generate novel research ideas ranked by feasibility, novelty, and impact.', color: 'from-pink-500 to-rose-500' },
-  { icon: Cpu, label: 'Execution Plan', desc: 'Get a step-by-step research plan with methodology, timeline, and resource estimates.', color: 'from-rose-500 to-orange-500' },
-  { icon: BookOpenCheck, label: 'Research Guide', desc: 'Generate comprehensive guides, presentations, and documented code.', color: 'from-orange-500 to-amber-500' },
-  { icon: FileText, label: 'Paper Writing', desc: 'Export a complete research paper with citations in DOCX or PDF format.', color: 'from-amber-500 to-green-500' },
+  { icon: Brain, label: 'NLP Analysis', desc: 'Deep linguistic analysis with spaCy, KeyBERT, and SentenceTransformers.', color: 'from-blue-500 to-indigo-500' },
+  { icon: BookOpen, label: 'Literature Review', desc: 'Retrieve papers from arXiv and multiple sources with inline abstract preview.', color: 'from-indigo-500 to-purple-500' },
+  { icon: Search, label: 'Research Gap', desc: 'Identify underexplored areas with categorized gap analysis.', color: 'from-purple-500 to-pink-500' },
+  { icon: Lightbulb, label: 'Research Ideas', desc: 'Generate novel ideas ranked by novelty and feasibility, then select the best one.', color: 'from-pink-500 to-rose-500' },
+  { icon: Target, label: 'SMART Objectives', desc: 'Formulate specific, measurable, achievable, relevant, time-bound objectives.', color: 'from-rose-500 to-orange-500' },
+  { icon: Cpu, label: 'Methodology', desc: 'Step-by-step plan with design, tools, timeline, and risk mitigation.', color: 'from-orange-500 to-amber-500' },
+  { icon: Database, label: 'Data Pipeline', desc: 'Dataset suggestions, preprocessing steps, and ethical considerations.', color: 'from-amber-500 to-yellow-600' },
+  { icon: Code2, label: 'Implementation', desc: 'Browse, upload, and generate code with syntax highlighting.', color: 'from-amber-500 to-yellow-500' },
+  { icon: FlaskConical, label: 'Experiments', desc: 'Design experiments, hyperparameters, baselines, and ablation studies.', color: 'from-yellow-500 to-lime-500' },
+  { icon: BarChart3, label: 'Results Analysis', desc: 'Comparison tables, visualization suggestions, and discussion points.', color: 'from-lime-500 to-green-500' },
+  { icon: BookOpenCheck, label: 'Research Guide', desc: 'Comprehensive guide with checklists, slides, and submission tips.', color: 'from-green-500 to-emerald-500' },
+  { icon: FileText, label: 'Paper Writing', desc: 'Full paper with section-by-section templates and smooth-scroll navigation.', color: 'from-emerald-500 to-teal-500' },
+  { icon: CheckCircle2, label: 'Review & Publish', desc: 'Final checks, venue suggestions, cover letter, and publication roadmap.', color: 'from-teal-500 to-cyan-500' },
 ];
 
 const FEATURES = [
@@ -27,7 +34,7 @@ const FEATURES = [
 ];
 
 const STATS = [
-  { icon: Star, value: '7', label: 'Research Steps' },
+  { icon: Star, value: '13', label: 'Research Steps' },
   { icon: Users, value: '1000+', label: 'Active Researchers' },
   { icon: FileCode2, value: '10K+', label: 'Papers Analyzed' },
   { icon: Layers, value: '7', label: 'LLM Providers' },
@@ -60,16 +67,16 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <Link href="/" className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white">
                 <Brain size={16} />
               </div>
-              <span className="font-semibold text-[var(--text-primary)]">ResearchIDE</span>
+              <span className="font-semibold text-[var(--text-primary)]" style={{ fontFamily: 'var(--font-heading)' }}>ResearchIDE</span>
             </Link>
 
             <div className="hidden md:flex items-center gap-8">
-              <a href="#how-it-works" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">How It Works</a>
-              <a href="#features" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">Features</a>
-              <a href="#pipeline" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">Pipeline</a>
+              <a href="#how-it-works" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors duration-200">How It Works</a>
+              <a href="#features" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors duration-200">Features</a>
+              <a href="#pipeline" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors duration-200">Pipeline</a>
             </div>
 
             <div className="hidden md:flex items-center gap-3">
@@ -87,7 +94,7 @@ export default function LandingPage() {
               )}
             </div>
 
-            <button className="md:hidden btn-icon" onClick={() => setMenuOpen(!menuOpen)}>
+            <button className="md:hidden btn-icon cursor-pointer" onClick={() => setMenuOpen(!menuOpen)}>
               {menuOpen ? <X size={18} /> : <Menu size={18} />}
             </button>
           </div>
@@ -96,9 +103,9 @@ export default function LandingPage() {
         {menuOpen && (
           <div className="md:hidden border-t border-[var(--border)] bg-[var(--bg-primary)]/95 backdrop-blur-xl">
             <div className="px-4 py-4 space-y-3">
-              <a href="#how-it-works" onClick={() => setMenuOpen(false)} className="block text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">How It Works</a>
-              <a href="#features" onClick={() => setMenuOpen(false)} className="block text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Features</a>
-              <a href="#pipeline" onClick={() => setMenuOpen(false)} className="block text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Pipeline</a>
+              <a href="#how-it-works" onClick={() => setMenuOpen(false)} className="block text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer">How It Works</a>
+              <a href="#features" onClick={() => setMenuOpen(false)} className="block text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer">Features</a>
+              <a href="#pipeline" onClick={() => setMenuOpen(false)} className="block text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer">Pipeline</a>
               <div className="pt-2 flex gap-2">
                 <Link href="/auth/login" onClick={() => setMenuOpen(false)} className="btn-ghost flex-1 justify-center text-xs">Sign In</Link>
                 <Link href="/auth/register" onClick={() => setMenuOpen(false)} className="btn-primary flex-1 justify-center text-xs">Get Started</Link>
@@ -112,16 +119,16 @@ export default function LandingPage() {
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
         <div className="absolute inset-0 bg-mesh" />
         <div className="absolute inset-0 bg-grid opacity-30" />
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-brand-500/10 rounded-full blur-[128px]" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[128px]" />
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-[128px]" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-[128px]" />
 
         <div className="relative z-10 max-w-5xl mx-auto px-4 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-brand-500/20 bg-brand-500/10 text-brand-400 text-xs mb-8">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 text-xs mb-8">
             <Sparkles size={12} />
             AI-Powered Research Platform
           </div>
 
-          <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold leading-tight mb-6">
+          <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold leading-tight mb-6" style={{ fontFamily: 'var(--font-heading)' }}>
             From{' '}
             <span className="text-gradient">Idea</span>
             {' '}to{' '}
@@ -145,7 +152,7 @@ export default function LandingPage() {
                 <Link href="/auth/register" className="btn-primary text-base px-8 py-3">
                   Start Researching <ArrowRight size={18} />
                 </Link>
-                <a href="#how-it-works" className="btn-secondary text-base px-8 py-3">
+                <a href="#how-it-works" className="btn-secondary text-base px-8 py-3 cursor-pointer">
                   See How It Works
                 </a>
               </>
@@ -168,14 +175,14 @@ export default function LandingPage() {
                 </div>
                 <div className="flex-1 flex justify-center">
                   <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-[var(--bg-primary)] border border-[var(--border)]">
-                    <Brain size={10} className="text-brand-400" />
+                    <Brain size={10} className="text-emerald-400" />
                     <span className="text-[10px] text-[var(--text-muted)] font-mono">research-ide — analyzing gaps...</span>
                   </div>
                 </div>
               </div>
               <div className="p-6 text-left">
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="flex h-6 w-6 items-center justify-center rounded bg-brand-600/20 text-brand-400">
+                  <div className="flex h-6 w-6 items-center justify-center rounded bg-emerald-600/20 text-emerald-400">
                     <Search size={12} />
                   </div>
                   <span className="text-xs font-medium text-[var(--text-primary)]">Gap Analysis Results</span>
@@ -188,16 +195,16 @@ export default function LandingPage() {
                     'Transfer learning approaches unexplored for this specific domain',
                   ].map((gap, i) => (
                     <div key={i} className="flex items-start gap-2 text-xs text-[var(--text-secondary)]">
-                      <div className="w-1.5 h-1.5 rounded-full bg-brand-400 mt-1.5 flex-shrink-0" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 flex-shrink-0" />
                       {gap}
                     </div>
                   ))}
                 </div>
                 <div className="mt-4 pt-4 border-t border-[var(--border)] flex items-center gap-2 text-xs text-[var(--text-muted)]">
                   <div className="h-1.5 flex-1 rounded-full bg-[var(--border)] overflow-hidden">
-                    <div className="h-full w-2/3 rounded-full bg-gradient-to-r from-brand-500 to-purple-500" />
+                    <div className="h-full w-2/3 rounded-full bg-gradient-to-r from-emerald-500 to-blue-500" />
                   </div>
-                  <span>Step 3 of 7</span>
+                  <span>13-Step Research Pipeline</span>
                 </div>
               </div>
             </div>
@@ -214,13 +221,13 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             {STATS.map((stat, i) => (
-              <div key={i} className="text-center">
+              <div key={i} className="text-center group cursor-pointer">
                 <div className="flex justify-center mb-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600/10">
-                    <stat.icon size={18} className="text-brand-400" />
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-600/10 group-hover:bg-emerald-600/20 transition-all duration-200">
+                    <stat.icon size={20} className="text-emerald-400" />
                   </div>
                 </div>
-                <div className="text-3xl font-bold text-[var(--text-primary)]">{stat.value}</div>
+                <div className="text-3xl font-bold text-[var(--text-primary)]" style={{ fontFamily: 'var(--font-heading)' }}>{stat.value}</div>
                 <div className="text-xs text-[var(--text-muted)] mt-1">{stat.label}</div>
               </div>
             ))}
@@ -233,7 +240,7 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-mesh opacity-50" />
         <div className="relative z-10 max-w-6xl mx-auto px-4">
           <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold text-[var(--text-primary)] mb-4">
+            <h2 className="text-3xl sm:text-4xl font-bold text-[var(--text-primary)] mb-4" style={{ fontFamily: 'var(--font-heading)' }}>
               How It Works
             </h2>
             <p className="text-[var(--text-secondary)] max-w-2xl mx-auto">
@@ -243,19 +250,19 @@ export default function LandingPage() {
 
           <div className="grid md:grid-cols-3 gap-6">
             {[
-              { step: '01', title: 'Describe Your Idea', desc: 'Write your research problem in natural language. Our AI extracts the core concepts, domain, and constraints.', color: 'from-brand-500 to-purple-500' },
-              { step: '02', title: 'AI-Powered Analysis', desc: 'ResearchIDE automatically retrieves papers, identifies gaps, generates ideas, and creates an execution plan.', color: 'from-purple-500 to-pink-500' },
-              { step: '03', title: 'Get Your Output', desc: 'Receive a complete research guide, presentation, code, and a formatted paper ready for submission.', color: 'from-pink-500 to-rose-500' },
+              { step: '01', title: 'Describe Your Idea', desc: 'Write your research problem in natural language. Our AI extracts the core concepts, domain, and constraints.', color: 'from-emerald-500 to-blue-500' },
+              { step: '02', title: 'AI-Powered Analysis', desc: 'ResearchIDE automatically retrieves papers, identifies gaps, generates ideas, and creates an execution plan.', color: 'from-blue-500 to-purple-500' },
+              { step: '03', title: 'Get Your Output', desc: 'Receive a complete research guide, presentation, code, and a formatted paper ready for submission.', color: 'from-purple-500 to-emerald-500' },
             ].map((item, i) => (
-              <div key={i} className="card relative group">
-                <div className={`absolute inset-0 rounded-xl bg-gradient-to-br ${item.color} opacity-0 group-hover:opacity-5 transition-opacity duration-500`} />
+              <div key={i} className="card relative group cursor-pointer">
+                <div className={`absolute inset-0 rounded-xl bg-gradient-to-br ${item.color} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
                 <div className="relative">
                   <div className="flex items-center gap-3 mb-4">
-                    <div className={`flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br ${item.color} text-white text-xs font-bold`}>
+                    <div className={`flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br ${item.color} text-white text-sm font-bold`}>
                       {item.step}
                     </div>
                   </div>
-                  <h3 className="font-semibold text-[var(--text-primary)] mb-2">{item.title}</h3>
+                  <h3 className="font-semibold text-[var(--text-primary)] mb-2" style={{ fontFamily: 'var(--font-heading)' }}>{item.title}</h3>
                   <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{item.desc}</p>
                 </div>
               </div>
@@ -268,8 +275,8 @@ export default function LandingPage() {
       <section id="pipeline" className="py-24 border-t border-[var(--border)]">
         <div className="max-w-6xl mx-auto px-4">
           <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold text-[var(--text-primary)] mb-4">
-              7-Step Research Pipeline
+            <h2 className="text-3xl sm:text-4xl font-bold text-[var(--text-primary)] mb-4" style={{ fontFamily: 'var(--font-heading)' }}>
+              13-Step Research Pipeline
             </h2>
             <p className="text-[var(--text-secondary)] max-w-2xl mx-auto">
               Each step builds on the previous, creating a seamless end-to-end research workflow.
@@ -278,7 +285,7 @@ export default function LandingPage() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {STEPS.map((step, i) => (
-              <div key={i} className="card group hover:border-brand-500/30 transition-all">
+              <div key={i} className="card group hover:border-emerald-500/30 transition-all duration-200 cursor-pointer">
                 <div className="flex items-center gap-3 mb-3">
                   <div className={`flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br ${step.color} text-white`}>
                     <step.icon size={15} />
@@ -299,7 +306,7 @@ export default function LandingPage() {
       <section id="features" className="py-24 border-t border-[var(--border)]">
         <div className="max-w-6xl mx-auto px-4">
           <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold text-[var(--text-primary)] mb-4">
+            <h2 className="text-3xl sm:text-4xl font-bold text-[var(--text-primary)] mb-4" style={{ fontFamily: 'var(--font-heading)' }}>
               Built for Researchers
             </h2>
             <p className="text-[var(--text-secondary)] max-w-2xl mx-auto">
@@ -309,12 +316,12 @@ export default function LandingPage() {
 
           <div className="grid md:grid-cols-2 gap-6">
             {FEATURES.map((feat, i) => (
-              <div key={i} className="card-elevated flex items-start gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600/10 flex-shrink-0">
-                  <feat.icon size={18} className="text-brand-400" />
+              <div key={i} className="card-elevated flex items-start gap-4 cursor-pointer group hover:border-emerald-500/30 transition-all duration-200">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600/10 flex-shrink-0 group-hover:bg-emerald-600/20 transition-all duration-200">
+                  <feat.icon size={18} className="text-emerald-400" />
                 </div>
                 <div>
-                  <h3 className="font-medium text-sm text-[var(--text-primary)] mb-1">{feat.title}</h3>
+                  <h3 className="font-medium text-sm text-[var(--text-primary)] mb-1" style={{ fontFamily: 'var(--font-heading)' }}>{feat.title}</h3>
                   <p className="text-xs text-[var(--text-secondary)]">{feat.desc}</p>
                 </div>
               </div>
@@ -325,14 +332,14 @@ export default function LandingPage() {
 
       {/* ─── CTA ─── */}
       <section className="py-24 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-brand-600/5 to-transparent" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-brand-500/5 rounded-full blur-[128px]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-emerald-600/5 to-transparent" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-500/5 rounded-full blur-[128px]" />
         <div className="relative z-10 max-w-3xl mx-auto px-4 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-brand-500/20 bg-brand-500/10 text-brand-400 text-xs mb-6">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 text-xs mb-6">
             <Sparkles size={12} />
             Get Started Free
           </div>
-          <h2 className="text-3xl sm:text-5xl font-bold text-[var(--text-primary)] mb-4">
+          <h2 className="text-3xl sm:text-5xl font-bold text-[var(--text-primary)] mb-4" style={{ fontFamily: 'var(--font-heading)' }}>
             Ready to Accelerate Your Research?
           </h2>
           <p className="text-[var(--text-secondary)] mb-10 max-w-xl mx-auto">
@@ -349,7 +356,7 @@ export default function LandingPage() {
                 <Link href="/auth/register" className="btn-primary text-base px-10 py-3">
                   Create Free Account <ArrowRight size={18} />
                 </Link>
-                <a href="#how-it-works" className="btn-secondary text-base px-8 py-3">
+                <a href="#how-it-works" className="btn-secondary text-base px-8 py-3 cursor-pointer">
                   Learn More
                 </a>
               </>
@@ -363,15 +370,15 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-4">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-600 text-white">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600 text-white">
                 <Brain size={12} />
               </div>
-              <span className="font-semibold text-sm text-[var(--text-primary)]">ResearchIDE</span>
+              <span className="font-semibold text-sm text-[var(--text-primary)]" style={{ fontFamily: 'var(--font-heading)' }}>ResearchIDE</span>
             </div>
             <div className="flex items-center gap-6 text-xs text-[var(--text-muted)]">
               <span>AI-Powered Research Platform</span>
               <span>&copy; {new Date().getFullYear()}</span>
-              <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="hover:text-[var(--text-secondary)] transition-colors">
+              <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="hover:text-[var(--text-secondary)] transition-colors duration-200">
                 <Github size={14} />
               </a>
             </div>

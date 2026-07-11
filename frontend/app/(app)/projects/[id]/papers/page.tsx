@@ -101,7 +101,7 @@ export default function PapersPage() {
   if (loading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-brand-400" /></div>;
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
+    <div className="min-h-screen bg-background text-foreground p-8 max-w-6xl mx-auto">
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-[var(--text-primary)]">Paper Explorer</h1>
@@ -219,9 +219,20 @@ export default function PapersPage() {
                       <span className={paper.source === 'arxiv' ? 'badge-blue' : 'badge-purple'}>
                         {paper.source}
                       </span>
-                      {paper.full_text && (
-                        <span className="badge-green text-[10px]">Full Text</span>
-                      )}
+                      {/* Full-text status badge */}
+                      {(() => {
+                        const status = paper.full_text_status || (paper.full_text ? 'full' : 'abstract');
+                        const badgeCls = status === 'full' || status === 'cached'
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                          : status === 'abstract'
+                            ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                            : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
+                        return (
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${badgeCls}`}>
+                            {status === 'full' || status === 'cached' ? 'Full Text' : status === 'abstract' ? 'Abstract Only' : 'Not Found'}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
                   <ChevronDown

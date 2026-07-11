@@ -221,7 +221,11 @@ def _format_constraints(constraints: Dict) -> str:
 
 
 def _summarize_gaps(gaps: List[Dict]) -> str:
-    return "\n".join(f"- {g.get('title', 'Unknown')}: {g.get('description', '')[:150]}" for g in gaps[:6])
+    parts = []
+    for g in gaps[:6]:
+        if isinstance(g, dict):
+            parts.append(f"- {g.get('title', 'Unknown')}: {g.get('description', '')[:150]}")
+    return "\n".join(parts)
 
 
 def _summarize_papers_brief(papers: List[Dict]) -> str:
@@ -244,10 +248,24 @@ def _parse_json_list(raw: str) -> List[Dict]:
     start = clean.find("[")
     end = clean.rfind("]") + 1
     if start != -1 and end > start:
-        return json.loads(clean[start:end])
+        result = json.loads(clean[start:end])
+        return _normalize_list(result)
     obj = json.loads(clean)
     for v in obj.values():
         if isinstance(v, list):
-            return v
+            return _normalize_list(v)
     return []
+
+
+def _normalize_list(items) -> List[Dict]:
+    """Flatten nested lists and ensure all items are dicts."""
+    result = []
+    for item in items:
+        if isinstance(item, dict):
+            result.append(item)
+        elif isinstance(item, list):
+            for sub in item:
+                if isinstance(sub, dict):
+                    result.append(sub)
+    return result
 

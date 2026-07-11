@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Play, Loader2, CheckCircle2, AlertCircle, Clock, ArrowRight } from 'lucide-react';
 import { pipelineAPI } from '@/services/api';
+import { showToast } from '@/components/ErrorToast';
 
 const STAGE_LABELS: Record<string, string> = {
   analysis: 'NLP Analysis',
@@ -38,6 +39,7 @@ export default function AutoPipeline({ projectId }: { projectId: string }) {
     STAGE_ORDER.forEach((s) => (initial[s] = 'pending'));
     initial.analysis = 'running';
     setStages(initial);
+    showToast('Starting full research pipeline...', 'info');
 
     pipelineAPI.runFullPipeline(
       projectId,
@@ -47,6 +49,7 @@ export default function AutoPipeline({ projectId }: { projectId: string }) {
           setStages((prev) => ({ ...prev, [stage]: 'running' }));
         } else if (data.status === 'done') {
           setStages((prev) => ({ ...prev, [stage]: 'done' }));
+          showToast(`${STAGE_LABELS[stage] || stage} completed`, 'success');
           // Start next stage
           const idx = STAGE_ORDER.indexOf(stage);
           if (idx >= 0 && idx < STAGE_ORDER.length - 1) {
@@ -56,6 +59,7 @@ export default function AutoPipeline({ projectId }: { projectId: string }) {
         } else if (data.status === 'error') {
           setStages((prev) => ({ ...prev, [stage]: 'error' }));
           setError(data.message || 'An error occurred');
+          showToast(`${STAGE_LABELS[stage] || stage} failed: ${data.message || 'Unknown error'}`, 'error');
         }
         if (data.message) {
           setMessages((prev) => ({ ...prev, [stage]: data.message }));
@@ -63,10 +67,12 @@ export default function AutoPipeline({ projectId }: { projectId: string }) {
       },
       () => {
         setRunning(false);
+        showToast('Pipeline completed successfully', 'success');
       },
       (err) => {
         setRunning(false);
         setError(err.message || 'Pipeline failed');
+        showToast('Pipeline connection failed: ' + (err.message || 'Check server status'), 'error');
       }
     );
   };

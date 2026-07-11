@@ -134,14 +134,19 @@ async def run_code_generation(
 
         file_structure = code_data.get("file_structure", [])
         if not file_structure and project_structure:
+            idea_title = (idea or {}).get("title", "Research Project")
+            idea_desc = (idea or {}).get("description", "")
+            idea_approach = (idea or {}).get("approach", "")
             file_structure = [
-                {"path": p, "content": f"# {p}\n# TODO: Implement\n"}
+                {
+                    "path": p,
+                    "content": (
+                        f'"""\n{p} - {idea_title}\n{idea_approach}\n"""\n\n'
+                        f"import logging\n\nlogger = logging.getLogger(__name__)\n\n\n"
+                    ),
+                }
                 for p in project_structure
             ]
-
-        for f in file_structure:
-            if isinstance(f.get("content"), str):
-                f["content"] = f["content"]
 
         return {
             "project_id": project_id,

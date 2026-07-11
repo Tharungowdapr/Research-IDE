@@ -5,22 +5,44 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   BarChart3, ArrowRight, Loader2, AlertCircle, Table,
   LineChart, AlertTriangle, Lightbulb, Target, Settings,
+  Save, Plus, Trash2, CheckCircle2,
 } from 'lucide-react';
 import { projectsAPI, agentsAPI } from '@/services/api';
+
+type MetricEntry = { key: string; value: string; };
 
 export default function ResultsPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [analysis, setAnalysis] = useState<any>(null);
+  const [userResults, setUserResults] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+  const [metrics, setMetrics] = useState<MetricEntry[]>([
+    { key: 'accuracy', value: '' },
+    { key: 'f1_score', value: '' },
+    { key: 'precision', value: '' },
+    { key: 'recall', value: '' },
+  ]);
+  const [extraNotes, setExtraNotes] = useState('');
 
   useEffect(() => {
     (async () => {
       try {
         const p = await projectsAPI.get(id);
         if (p.outputs?.analysis_template) setAnalysis(p.outputs.analysis_template);
+        if (p.outputs?.user_results) {
+          setUserResults(p.outputs.user_results);
+          const existing = p.outputs.user_results;
+          const entries = Object.entries(existing)
+            .filter(([k]) => k !== 'notes')
+            .map(([k, v]) => ({ key: k, value: String(v) }));
+          if (entries.length > 0) setMetrics(entries);
+          if (existing.notes) setExtraNotes(existing.notes);
+        }
       } catch (e: any) {
         setError(e.response?.data?.detail || 'Failed to load project');
       } finally {
@@ -42,23 +64,112 @@ export default function ResultsPage() {
     }
   };
 
+  const handleSaveResults = async () => {
+    setSaving(true);
+    setError('');
+    setSaved(false);
+    try {
+      const metricsObj: Record<string, any> = {};
+      for (const m of metrics) {
+        if (m.key.trim()) {
+          const num = parseFloat(m.value);
+          metricsObj[m.key.trim()] = isNaN(num) ? m.value : num;
+        }
+      }
+      if (extraNotes.trim()) metricsObj.notes = extraNotes.trim();
+
+      const payload: any = { project_id: id, metrics: metricsObj };
+      await agentsAPI.uploadResults(id, metricsObj);
+      setUserResults(metricsObj);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e: any) {
+      setError(e.response?.data?.detail || 'Failed to save results.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addMetric = () => setMetrics([...metrics, { key: '', value: '' }]);
+  const removeMetric = (idx: number) => setMetrics(metrics.filter((_, i) => i !== idx));
+  const updateMetric = (idx: number, field: 'key' | 'value', val: string) => {
+    const next = [...metrics];
+    next[idx] = { ...next[idx], [field]: val };
+    setMetrics(next);
+  };
+
   const handleProceed = () => router.push(`/projects/${id}/guide`);
 
   if (loading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-brand-400" /></div>;
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className="min-h-screen bg-background text-foreground p-8 max-w-5xl mx-auto">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-[var(--text-primary)]">Results Analysis</h1>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">Step 10 of 13 — Plan how to analyze your results</p>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">Step 10 of 13 — Enter metrics and plan analysis</p>
         </div>
-        {analysis && (
-          <button onClick={handleProceed} className="btn-primary"><ArrowRight size={14} /> Research Guide</button>
-        )}
+        <div className="flex gap-2">
+          <button onClick={handleSaveResults} disabled={saving}
+            className="btn-secondary flex items-center gap-1.5">
+            {saving ? <Loader2 size={14} className="animate-spin" /> :
+              saved ? <CheckCircle2 size={14} className="text-green-400" /> :
+                <Save size={14} />}
+            {saved ? 'Saved!' : saving ? 'Saving...' : 'Save Results'}
+          </button>
+          {analysis && (
+            <button onClick={handleProceed} className="btn-primary"><ArrowRight size={14} /> Research Guide</button>
+          )}
+        </div>
       </div>
 
       {error && <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400 flex items-center gap-2"><AlertCircle size={14} /> {String(error)}</div>}
+
+      <div className="card mb-5">
+        <h2 className="font-semibold text-sm text-[var(--text-primary)] mb-3 flex items-center gap-2">
+          <Settings size={14} className="text-brand-400" /> Experimental Results
+        </h2>
+        <p className="text-xs text-[var(--text-muted)] mb-4">
+          Enter your experimental metrics (accuracy, F1, inference time, etc.). These will be saved and used in report generation.
+        </p>
+        <div className="space-y-2">
+          {metrics.map((m, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="metric name"
+                value={m.key}
+                onChange={e => updateMetric(i, 'key', e.target.value)}
+                className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-brand-500"
+              />
+              <input
+                type="text"
+                placeholder="value"
+                value={m.value}
+                onChange={e => updateMetric(i, 'value', e.target.value)}
+                className="w-32 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-brand-500"
+              />
+              <button onClick={() => removeMetric(i)}
+                className="p-2 rounded-lg text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <button onClick={addMetric}
+          className="mt-3 flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 transition-colors">
+          <Plus size={13} /> Add metric
+        </button>
+        <div className="mt-4">
+          <textarea
+            placeholder="Additional notes (optional)..."
+            value={extraNotes}
+            onChange={e => setExtraNotes(e.target.value)}
+            rows={3}
+            className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-brand-500 resize-none"
+          />
+        </div>
+      </div>
 
       {!analysis && !generating ? (
         <div className="card text-center py-16">
@@ -74,7 +185,7 @@ export default function ResultsPage() {
             <div className="card text-center py-12"><Loader2 className="animate-spin text-brand-400 mx-auto" size={24} /><p className="text-sm mt-3 text-[var(--text-secondary)]">Generating analysis plan...</p></div>
           )}
 
-{analysis?.comparison_tables?.map((t: any, i: number) => (
+          {analysis?.comparison_tables?.map((t: any, i: number) => (
             <div key={i} className="card">
               <h2 className="font-semibold text-sm text-[var(--text-primary)] mb-3 flex items-center gap-2">
                 <Table size={14} className="text-brand-400" /> {t.table_name}
@@ -93,7 +204,7 @@ export default function ResultsPage() {
                     {t.rows?.map((row: any[], j: number) => (
                       <tr key={j} className="border-b border-[var(--border)]/50">
                         {row.map((cell: any, k: number) => (
-                          <td key={k} className={`px-3 py-2 text-[var(--text-secondary)] ${k === 0 ? 'font-medium text-[var(--text-primary)]' : ''} ${k > 0 && row[k] > (row[k-1] || 0) ? 'text-emerald-400' : ''}`}>{cell}</td>
+                          <td key={k} className={`px-3 py-2 text-[var(--text-secondary)] ${k === 0 ? 'font-medium text-[var(--text-primary)]' : ''}`}>{cell}</td>
                         ))}
                       </tr>
                     ))}

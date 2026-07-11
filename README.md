@@ -340,11 +340,125 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 ---
 
+## 🧪 Testing
+
+### Run All Tests
+
+```bash
+cd backend
+python -m pytest tests/ -v
+```
+
+### Test Results (116 tests)
+
+| Category | Tests | Status |
+|----------|-------|--------|
+| **Retrieval Scoring** | 12 | All pass |
+| **Deduplication** | 4 | All pass |
+| **Quality Gate** | 6 | All pass |
+| **Gap Analysis** | 8 | All pass |
+| **Idea Generator** | 3 | All pass |
+| **Intent Extraction** | 5 | All pass |
+| **NLP Analyzer** | 6 | All pass |
+| **Writer Agent** | 9 | All pass |
+| **Rate Limiter** | 2 | All pass |
+| **Export (PDF/DOCX)** | 4 | All pass |
+| **LLM Client** | 3 | All pass |
+| **Pipeline Integration** | 2 | All pass |
+| **Scoring Metrics** | 4 | All pass |
+| **Comprehensive** | 42 | All pass |
+| **Total** | **116** | **All pass** |
+
+### Test Categories
+
+- **NLP Tests**: Domain classification, NER, POS tagging, keyword extraction, sentence splitting
+- **AI Tests**: LLM client initialization, JSON extraction, quality gate validation
+- **Scoring Tests**: Recency, relevance, citation weight, compute score, deduplication
+- **Export Tests**: PDF generation (IEEE format), DOCX generation, Unicode handling
+- **Pipeline Tests**: Stage ordering, scoring weights, integration checks
+
+---
+
+## ☁️ Cloud Deployment (Free Tier)
+
+### Option 1: Render + Vercel (Recommended)
+
+**Backend (Render Free Tier)**
+1. Push to GitHub
+2. Go to [render.com](https://render.com) → New Web Service
+3. Connect your GitHub repo
+4. Settings:
+   - Build Command: `cd backend && pip install -r requirements.txt`
+   - Start Command: `cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT`
+   - Environment: Python 3.11
+5. Add environment variables:
+   ```
+   DATABASE_URL=sqlite:///./research_ide.db
+   SECRET_KEY=<generate: python -c "import secrets; print(secrets.token_urlsafe(32))">
+   ENCRYPTION_KEY=<generate: python -c "import secrets; print(secrets.token_urlsafe(32))">
+   DEFAULT_LLM_PROVIDER=groq
+   GROQ_API_KEY=<your-groq-api-key>
+   ALLOWED_ORIGINS=["https://your-app.vercel.app"]
+   ```
+
+**Frontend (Vercel Free Tier)**
+1. Go to [vercel.com](https://vercel.com) → Import Git Repository
+2. Connect your GitHub repo
+3. Settings:
+   - Framework Preset: Next.js
+   - Root Directory: `frontend`
+   - Build Command: `npm run build`
+   - Output Directory: `.next`
+4. Add environment variable:
+   ```
+   NEXT_PUBLIC_API_URL=https://your-app.onrender.com
+   ```
+
+### Option 2: Railway (Full-Stack)
+
+1. Go to [railway.app](https://railway.app)
+2. Deploy from GitHub repo
+3. Add PostgreSQL plugin (free $5/month credit)
+4. Set environment variables in Railway dashboard
+
+### Option 3: Docker (Local/Any Cloud)
+
+```bash
+docker-compose up --build
+```
+
+Frontend: http://localhost:3000
+Backend: http://localhost:8000/api/docs
+
+### Free Tier Limits
+
+| Service | Free Tier | Notes |
+|---------|-----------|-------|
+| **Render** | 750 hrs/month | Spins down after 15 min inactivity |
+| **Vercel** | Unlimited | 100GB bandwidth/month |
+| **Railway** | $5/month credit | ~500 hours of basic service |
+| **Neon Postgres** | 0.5GB storage | 24/7 compute (no spin-down) |
+| **Upstash Redis** | 10K commands/day | Serverless, pay-per-request |
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Tools |
+|-------|-------|
+| **Backend** | FastAPI, SQLAlchemy, SQLite/PostgreSQL, bcrypt, python-jose, httpx |
+| **Frontend** | Next.js 14, Tailwind CSS, Zustand, TanStack Query, Axios |
+| **NLP** | spaCy (en_core_web_sm), KeyBERT, SentenceTransformers |
+| **Export** | fpdf2 (PDF), python-docx (DOCX) |
+| **CI/CD** | GitHub Actions |
+
+---
+
 ## 🧪 Development
 
 ```bash
 # Run tests
-make test
+cd backend && python -m pytest tests/ -v
 
 # Run only backend
 cd backend && source venv/bin/activate && uvicorn main:app --reload
@@ -355,25 +469,3 @@ cd frontend && npm run dev
 # Reset database
 rm backend/research_ide.db  # Restart backend — tables auto-recreate
 ```
-
----
-
-## 🤝 Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
----
-
-## 📄 License
-
-MIT License — free to use, modify, and distribute.
-
----
-
-## 🙏 Acknowledgements
-
-- [arXiv API](https://arxiv.org/help/api) for paper search
-- [Semantic Scholar API](https://api.semanticscholar.org/) for citations
-- [OpenAlex](https://openalex.org/) for open scholarly metadata
-- [Papers With Code](https://paperswithcode.com/) for code references
-- [Ollama](https://ollama.ai) for local model serving

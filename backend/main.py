@@ -8,11 +8,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
 import time
+import logging
+import uuid
 
 from api.routes import auth, project, pipeline, agents, llm_config, export, zotero, plugins, system
 from core.database import Base, engine
 from core.config import settings
 import models.project  # ensure UsageLog and all models are registered with Base
+
+logger = logging.getLogger(__name__)
 
 # Create all database tables
 Base.metadata.create_all(bind=engine)
@@ -43,12 +47,14 @@ async def add_process_time_header(request: Request, call_next):
     response.headers["X-Process-Time"] = str(process_time)
     return response
 
-# Global exception handler
+# Global exception handler — never leak internal details
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    exc_id = str(uuid.uuid4())[:8]
+    logger.error(f"[{exc_id}] Unhandled exception: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
-        content={"detail": str(exc), "type": type(exc).__name__},
+        content={"detail": "Internal server error", "exc_id": exc_id},
     )
 
 # Include routers

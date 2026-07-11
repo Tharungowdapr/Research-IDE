@@ -61,6 +61,15 @@ def decode_token(token: str) -> dict:
         )
 
 
+def verify_token(token: str) -> Optional[str]:
+    """Verify a JWT token and return user_id, or None if invalid."""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        return payload.get("sub")
+    except JWTError:
+        return None
+
+
 # ── Dependency: Current User ──────────────────────────────────────────────────
 
 def get_current_user(

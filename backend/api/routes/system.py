@@ -110,20 +110,20 @@ def _get_snapshot() -> dict:
 @router.get("/snapshot")
 async def system_snapshot(current_user: User = Depends(get_current_user)):
     """Single system snapshot."""
-    psutil.cpu_percent(interval=None)  # prime the counter
+    await asyncio.get_event_loop().run_in_executor(None, lambda: psutil.cpu_percent(interval=None))
     await asyncio.sleep(0.2)
-    return _get_snapshot()
+    return await asyncio.get_event_loop().run_in_executor(None, _get_snapshot)
 
 
 @router.get("/stream")
 async def system_stream(current_user: User = Depends(get_current_user)):
     """SSE stream of system metrics every 2 seconds."""
-    psutil.cpu_percent(interval=None)  # prime
+    await asyncio.get_event_loop().run_in_executor(None, lambda: psutil.cpu_percent(interval=None))
 
     async def generator():
         try:
             while True:
-                data = _get_snapshot()
+                data = await asyncio.get_event_loop().run_in_executor(None, _get_snapshot)
                 yield f"data: {json.dumps(data)}\n\n"
                 await asyncio.sleep(2)
         except asyncio.CancelledError:

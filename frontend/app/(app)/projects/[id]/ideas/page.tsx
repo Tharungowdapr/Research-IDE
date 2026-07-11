@@ -85,7 +85,7 @@ export default function IdeasPage() {
   if (loading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-brand-400" /></div>;
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className="min-h-screen bg-background text-foreground p-8 max-w-5xl mx-auto">
       <div className="mb-6">
         <h1 className="text-xl font-bold text-[var(--text-primary)]">Research Ideas</h1>
         <p className="text-xs text-[var(--text-muted)] mt-0.5">
@@ -172,6 +172,25 @@ export default function IdeasPage() {
                     </p>
                     <p className="text-xs text-[var(--text-secondary)]">{idea.novelty}</p>
                   </div>
+
+                  {/* Peer Review: Critique + Failure Modes */}
+                  {(idea.critique_summary || idea.failure_modes?.length > 0) && (
+                    <div className="rounded-lg bg-yellow-500/5 border border-yellow-500/20 p-3">
+                      <p className="text-xs font-medium text-yellow-400 mb-1.5 flex items-center gap-1">
+                        <AlertCircle size={10} /> Peer Review
+                      </p>
+                      {idea.critique_summary && (
+                        <p className="text-xs text-[var(--text-secondary)] mb-2 italic">{idea.critique_summary}</p>
+                      )}
+                      {idea.failure_modes?.length > 0 && (
+                        <ul className="space-y-0.5">
+                          {idea.failure_modes.map((fm: string, j: number) => (
+                            <li key={j} className="text-[10px] text-[var(--text-muted)]">• {fm}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     {idea.suggested_methods?.length > 0 && (

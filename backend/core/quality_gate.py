@@ -35,18 +35,25 @@ def validate_gap(gap: dict) -> Tuple[bool, List[str]]:
 def validate_idea(idea: dict) -> Tuple[bool, List[str]]:
     """Returns (is_valid, list_of_issues). Ideas that fail are flagged but not discarded."""
     issues: List[str] = []
-    ps = idea.get("problem_statement", "")
-    sol = idea.get("proposed_solution", "")
-    why = idea.get("why_it_addresses_gap", "")
+    title = idea.get("title", "")
+    desc = idea.get("description", "")
+    novelty = idea.get("novelty", "")
+    approach = idea.get("approach", "")
+    novelty_score = idea.get("novelty_score")
+    feasibility_score = idea.get("feasibility_score")
 
-    if len(ps) < 100:
-        issues.append(f"Problem statement too shallow ({len(ps)} chars, need 100+)")
-    if len(sol) < 150:
-        issues.append(f"Proposed solution lacks depth ({len(sol)} chars, need 150+)")
-    if len(why) < 50:
-        issues.append(f"Gap connection too brief ({len(why)} chars, need 50+)")
-    if not idea.get("title"):
+    if not title:
         issues.append("Missing title")
+    if len(desc) < 80:
+        issues.append(f"Description too short ({len(desc)} chars, need 80+)")
+    if len(novelty) < 50:
+        issues.append(f"Novelty explanation too short ({len(novelty)} chars, need 50+)")
+    if len(approach) < 50:
+        issues.append(f"Approach too short ({len(approach)} chars, need 50+)")
+    if novelty_score is not None and not (1 <= float(novelty_score) <= 10):
+        issues.append(f"Novelty score out of range: {novelty_score}")
+    if feasibility_score is not None and not (1 <= float(feasibility_score) <= 10):
+        issues.append(f"Feasibility score out of range: {feasibility_score}")
 
     return len(issues) == 0, issues
 

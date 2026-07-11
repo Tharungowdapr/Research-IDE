@@ -22,6 +22,12 @@ const CONFIDENCE_COLORS: Record<string, string> = {
   low: 'text-red-400',
 };
 
+const EVIDENCE_COLORS: Record<string, string> = {
+  strong: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  moderate: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+  weak: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+};
+
 export default function GapsPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -93,7 +99,7 @@ export default function GapsPage() {
   );
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className="min-h-screen bg-background text-foreground p-8 max-w-5xl mx-auto">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-[var(--text-primary)]">Gap Analysis</h1>
@@ -133,7 +139,7 @@ export default function GapsPage() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1.5">
                     <span className="text-xs font-semibold text-[var(--text-muted)]">#{i + 1}</span>
-                    <h3 className="font-semibold text-sm text-[var(--text-primary)]">{gap.title}</h3>
+                    <h3 className="font-semibold text-sm text-[var(--text-primary)]">{String(gap.title || '')}</h3>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     <span className={TYPE_COLORS[gap.type] || 'badge-blue'}>{gap.type}</span>
@@ -144,6 +150,14 @@ export default function GapsPage() {
                       <TrendingUp size={10} className="text-brand-400" />
                       Novelty potential: {gap.novelty_potential}/10
                     </span>
+                    {gap.evidence_strength && (
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${EVIDENCE_COLORS[gap.evidence_strength] || 'bg-gray-100 text-gray-600'}`}>
+                        Evidence: {gap.evidence_strength}
+                      </span>
+                    )}
+                    {gap.gap_category && (
+                      <span className="badge-blue text-[10px]">{String(gap.gap_category || '').replace(/_/g, ' ')}</span>
+                    )}
                     {gap.from_full_text && (
                       <span className="badge-green text-[10px]">Full Text Analyzed</span>
                     )}
@@ -151,16 +165,21 @@ export default function GapsPage() {
                 </div>
               </div>
 
-              <p className="text-sm text-[var(--text-secondary)] leading-relaxed mb-3">{gap.description}</p>
+              <p className="text-sm text-[var(--text-secondary)] leading-relaxed mb-3">
+                {typeof gap.description === 'string' ? gap.description : JSON.stringify(gap.description)}
+              </p>
 
               <div className="grid grid-cols-2 gap-3">
                 {gap.supporting_papers?.length > 0 && (
                   <div className="rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] p-3">
                     <p className="text-xs font-medium text-[var(--text-muted)] mb-1.5">Supporting Papers</p>
                     <ul className="space-y-0.5">
-                      {gap.supporting_papers.slice(0, 3).map((p: string, j: number) => (
-                        <li key={j} className="text-xs text-[var(--text-secondary)] truncate">• {p}</li>
-                      ))}
+                       {gap.supporting_papers.slice(0, 3).map((p: any, j: number) => {
+                         const label = typeof p === 'string' ? p
+                           : typeof p === 'object' ? (p?.title || p?.paper_title || p?.gap || JSON.stringify(p))
+                           : String(p);
+                         return <li key={j} className="text-xs text-[var(--text-secondary)] truncate">• {label}</li>;
+                      })}
                     </ul>
                   </div>
                 )}

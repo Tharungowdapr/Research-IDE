@@ -5,47 +5,57 @@ Deep linguistic + semantic analysis of user input using spaCy, KeyBERT, Sentence
 
 import re
 import logging
+import asyncio
 from typing import Dict, List, Optional
 from core.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
 
-# Lazy-loaded singletons
+# Lazy-loaded singletons with thread safety
 _nlp = None
 _keybert = None
 _encoder = None
+_nlp_lock = asyncio.Lock()
+_keybert_lock = asyncio.Lock()
+_encoder_lock = asyncio.Lock()
 
 
-def _get_nlp():
+async def _get_nlp():
     global _nlp
     if _nlp is None:
-        import spacy
-        _nlp = spacy.load("en_core_web_sm")
+        async with _nlp_lock:
+            if _nlp is None:
+                import spacy
+                _nlp = spacy.load("en_core_web_sm")
     return _nlp
 
 
-def _get_keybert():
+async def _get_keybert():
     global _keybert
     if _keybert is None:
-        from keybert import KeyBERT
-        _keybert = KeyBERT()
+        async with _keybert_lock:
+            if _keybert is None:
+                from keybert import KeyBERT
+                _keybert = KeyBERT()
     return _keybert
 
 
-def _get_encoder():
+async def _get_encoder():
     global _encoder
     if _encoder is None:
-        try:
-            from sentence_transformers import SentenceTransformer
-            _encoder = SentenceTransformer("all-MiniLM-L6-v2")
-        except Exception:
-            logger.warning("SentenceTransformers not available, embeddings disabled")
+        async with _encoder_lock:
+            if _encoder is None:
+                try:
+                    from sentence_transformers import SentenceTransformer
+                    _encoder = SentenceTransformer("all-MiniLM-L6-v2")
+                except Exception:
+                    logger.warning("SentenceTransformers not available, embeddings disabled")
     return _encoder
 
 
 async def analyze_text(text: str, llm: Optional[LLMClient] = None) -> Dict:
     """Run full NLP analysis pipeline on input text."""
-    nlp = _get_nlp()
+    nlp = await _get_nlp()
     doc = nlp(text.strip())
 
     results = {}
@@ -57,30 +67,15 @@ async def analyze_text(text: str, llm: Optional[LLMClient] = None) -> Dict:
         "characters": len(text),
     }
 
-    # 2. POS tags (top frequency)
-    pos_counts = {}
-    for token in doc:
-        if not token.is_punct and not token.is_space:
-            pos_counts[token.pos_] = pos_counts.get(token.pos_, 0) + 1
-    sorted_pos = sorted(pos_counts.items(), key=lambda x: -x[1])
-    results["pos_distribution"] = [{"tag": t, "count": c} for t, c in sorted_pos[:10]]
-
-    # 3. Named Entities
+    # 2. Named Entities
     entities = []
     for ent in doc.ents:
         entities.append({"text": ent.text, "label": ent.label_, "label_name": _label_name(ent.label_)})
     results["entities"] = entities[:20]
 
-    # 4. Dependency graph (simplified — root + main branches)
-    root = next((t for t in doc if t.head == t), None)
-    deps = []
-    if root:
-        deps = _extract_dep_children(root, depth=0, max_depth=3)
-    results["dependency_tree"] = {"root": root.text if root else "", "branches": deps}
-
-    # 5. Keyphrases (KeyBERT — up to 15)
+    # 3. Keyphrases (KeyBERT — up to 15)
     try:
-        kw_model = _get_keybert()
+        kw_model = await _get_keybert()
         keywords = kw_model.extract_keywords(
             text,
             keyphrase_ngram_range=(1, 4),
@@ -92,25 +87,25 @@ async def analyze_text(text: str, llm: Optional[LLMClient] = None) -> Dict:
         logger.warning(f"KeyBERT failed: {e}")
         results["keyphrases"] = []
 
-    # 6. Embedding (SentenceTransformers)
+    # 4. Embedding (SentenceTransformers — full 384 dimensions)
     try:
-        encoder = _get_encoder()
+        encoder = await _get_encoder()
         if encoder:
             vec = encoder.encode(text)
-            results["embedding"] = vec.tolist()[:64]
+            results["embedding"] = vec.tolist()
         else:
             results["embedding"] = []
     except Exception as e:
         logger.warning(f"Embedding failed: {e}")
         results["embedding"] = []
 
-    # 7. Domain classification (rule-based + LLM if available)
+    # 5. Domain classification (rule-based + LLM if available)
     results["domain"] = _classify_domain(text, doc)
 
-    # 8. Query expansion (LLM if available, fallback rule-based)
+    # 6. Query expansion (LLM if available, fallback rule-based)
     results["search_queries"] = await _generate_queries(text, doc, llm)
 
-    # 9. Summary (LLM if available)
+    # 7. Summary (LLM if available)
     results["summary"] = await _generate_summary(text, llm)
 
     return results

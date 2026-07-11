@@ -233,14 +233,13 @@ class LLMClient:
             raise ValueError(f"Unsupported provider: {self.provider}")
 
         last_exc = None
-        for attempt in range(3):
+        for attempt in range(5):
             try:
                 content, usage = await handler(prompt, system, json_mode)
-                # Log usage if user_id is available
+                # Enrich usage with cost/energy but do NOT log here — caller handles logging
                 if self.user_id:
                     usage["energy_wh"] = self._calculate_energy(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
                     usage["cost_usd"] = self._calculate_cost(usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
-                    _log_usage_background(self.user_id, self.provider.value, self.model, usage)
                 return content, usage
             except httpx.HTTPStatusError as e:
                 last_exc = e
@@ -255,18 +254,18 @@ class LLMClient:
                     elif status == 422:
                         raise ValueError(f"LLM request invalid (422): {e.response.text[:200]}")
                     raise ValueError(f"LLM request failed with HTTP {status}: {e.response.text[:200]}")
-                wait = min(2 ** attempt, 8)
+                wait = min(2 ** attempt * 2, 30)
                 await asyncio.sleep(wait)
             except Exception as e:
                 last_exc = e
-                wait = min(2 ** attempt, 8)
+                wait = min(2 ** attempt * 2, 30)
                 await asyncio.sleep(wait)
 
         if last_exc:
             if isinstance(last_exc, httpx.HTTPStatusError):
                 status = last_exc.response.status_code
-                raise ValueError(f"LLM request failed after 3 retries (HTTP {status}): {last_exc.response.text[:200]}")
-            raise ValueError(f"LLM request failed after 3 retries: {last_exc}")
+                raise ValueError(f"LLM request failed after 5 retries (HTTP {status}): {last_exc.response.text[:200]}")
+            raise ValueError(f"LLM request failed after 5 retries: {last_exc}")
         raise ValueError("LLM request failed: unknown error")
 
     async def complete(
@@ -289,6 +288,8 @@ class LLMClient:
     ) -> dict:
         """Generate a completion with token usage info. Returns dict with content and usage."""
         content, usage = await self._complete_with_retry(prompt, system, json_mode)
+        if self.user_id:
+            _log_usage_background(self.user_id, self.provider.value, self.model, usage)
         return {"content": content, "usage": usage}
 
     async def stream_complete(
@@ -405,11 +406,10 @@ class LLMClient:
                                 if line == "[DONE]":
                                     break
                                 try:
-                                    import json
                                     data = json.loads(line)
                                     if data["choices"][0]["delta"].get("content"):
                                         yield data["choices"][0]["delta"]["content"]
-                                except:
+                                except (json.JSONDecodeError, KeyError, IndexError, TypeError):
                                     pass
                         return
             except httpx.HTTPStatusError as e:
@@ -497,7 +497,7 @@ class LLMClient:
                             data = json.loads(line[6:])
                             if data.get("type") == "content_block_delta" and "text" in data.get("delta", {}):
                                 yield data["delta"]["text"]
-                        except:
+                        except (json.JSONDecodeError, KeyError, IndexError, TypeError):
                             pass
 
     # ── Gemini ─────────────────────────────────────────────────────────
@@ -564,7 +564,7 @@ class LLMClient:
                                 parts = data["candidates"][0].get("content", {}).get("parts", [])
                                 if parts and "text" in parts[0]:
                                     yield parts[0]["text"]
-                        except:
+                        except (json.JSONDecodeError, KeyError, IndexError, TypeError):
                             pass
 
     # ── Cohere ────────────────────────────────────────────────────────────────
@@ -629,7 +629,7 @@ class LLMClient:
                             data = json.loads(line)
                             if data.get("event_type") == "text-generation":
                                 yield data["text"]
-                        except:
+                        except (json.JSONDecodeError, KeyError, IndexError, TypeError):
                             pass
 
     # ── Ollama ────────────────────────────────────────────────────────────────
@@ -694,7 +694,7 @@ class LLMClient:
                             data = json.loads(line)
                             if "message" in data and "content" in data["message"]:
                                 yield data["message"]["content"]
-                        except:
+                        except (json.JSONDecodeError, KeyError, IndexError, TypeError):
                             pass
 
     # ── Helpers ───────────────────────────────────────────────────────────────
@@ -797,11 +797,11 @@ async def _persist_usage(user_id: str, provider: str, model: str, usage: dict) -
                 user_id=user_id,
                 provider=provider,
                 model=model,
-                prompt_tokens=str(usage.get("prompt_tokens", 0)),
-                completion_tokens=str(usage.get("completion_tokens", 0)),
-                total_tokens=str(usage.get("total_tokens", 0)),
-                cost_usd=str(round(usage.get("cost_usd", 0.0), 8)),
-                energy_wh=str(round(usage.get("energy_wh", 0.0), 8)),
+                prompt_tokens=int(usage.get("prompt_tokens", 0)),
+                completion_tokens=int(usage.get("completion_tokens", 0)),
+                total_tokens=int(usage.get("total_tokens", 0)),
+                cost_usd=round(float(usage.get("cost_usd", 0.0)), 8),
+                energy_wh=round(float(usage.get("energy_wh", 0.0)), 8),
             )
             db.add(log)
             db.commit()

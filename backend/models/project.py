@@ -4,7 +4,7 @@ Project and Output SQLAlchemy models
 
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Text, JSON, ForeignKey
+from sqlalchemy import Column, String, DateTime, Text, JSON, ForeignKey, Integer, Float
 from sqlalchemy.orm import relationship
 from core.database import Base
 
@@ -51,11 +51,11 @@ class UsageLog(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
     provider = Column(String, nullable=False)
     model = Column(String, nullable=False)
-    prompt_tokens = Column(String, default="0")
-    completion_tokens = Column(String, default="0")
-    total_tokens = Column(String, default="0")
-    cost_usd = Column(String, default="0.0")
-    energy_wh = Column(String, default="0.0")   # estimated watt-hours
+    prompt_tokens = Column(Integer, default=0)
+    completion_tokens = Column(Integer, default=0)
+    total_tokens = Column(Integer, default=0)
+    cost_usd = Column(Float, default=0.0)
+    energy_wh = Column(Float, default=0.0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     def __repr__(self):
@@ -78,6 +78,19 @@ class PaperCache(Base):
     methods = Column(JSON, default=list)
     datasets = Column(JSON, default=list)
     limitations = Column(JSON, default=list)
-    full_text = Column(Text)  # Full text content from PDF/HTML
     embedding = Column(JSON)  # stored as list of floats
     cached_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class PipelineLog(Base):
+    __tablename__ = "pipeline_logs"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id = Column(String, ForeignKey("projects.id"), nullable=False, index=True)
+    stage = Column(String, nullable=False)
+    status = Column(String, nullable=False)  # running | done | error
+    started_at = Column(DateTime, nullable=False)
+    finished_at = Column(DateTime)
+    output_size_bytes = Column(Integer, default=0)
+    error_message = Column(Text)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

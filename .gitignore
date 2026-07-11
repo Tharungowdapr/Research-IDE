@@ -37,3 +37,15 @@ checkpoints/
 *.gguf
 *.bin
 .cloud/.env.cloud
+
+# Test artifacts
+*.pdf
+test_ieee_output.pdf
+backend/test_ieee.pdf
+backend/test_output.pdf
+.pytest_cache/
+backend/.pytest_cache/
+frontend/tsconfig.tsbuildinfo
+
+# Backend secrets
+backend/.env

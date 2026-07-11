@@ -2,7 +2,7 @@
 Authentication Routes: Register, Login, Refresh, Me
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,28 @@ from core.security import (
 from models.user import User
 
 router = APIRouter()
+
+# Simple in-memory rate limiter (production: use slowapi or Redis-backed limiter)
+_login_attempts: dict = {}
+_MAX_LOGIN_ATTEMPTS = 10
+_LOCKOUT_SECONDS = 300
+
+
+def _check_rate_limit(key: str, max_attempts: int, window: int) -> bool:
+    """Returns True if request is allowed, False if rate-limited."""
+    import time
+    now = time.time()
+    if key in _login_attempts:
+        attempts, first_at = _login_attempts[key]
+        if now - first_at > window:
+            _login_attempts.pop(key, None)
+            return True
+        if attempts >= max_attempts:
+            return False
+        _login_attempts[key] = (attempts + 1, first_at)
+    else:
+        _login_attempts[key] = (1, now)
+    return True
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
@@ -47,7 +69,11 @@ class UpdateProfileRequest(BaseModel):
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest, db: Session = Depends(get_db)):
+async def register(body: RegisterRequest, request: Request, db: Session = Depends(get_db)):
+    # Rate limit: 3 registrations per minute per IP
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(f"register:{client_ip}", 3, 60):
+        raise HTTPException(status_code=429, detail="Too many registration attempts. Try again later.")
     try:
         # Check email uniqueness
         if db.query(User).filter(User.email == body.email).first():
@@ -85,10 +111,21 @@ async def register(body: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login")
-async def login(body: LoginRequest, db: Session = Depends(get_db)):
+async def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    # Rate limit: 5 login attempts per minute per IP
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(f"login:{client_ip}", 5, 60):
+        raise HTTPException(status_code=429, detail="Too many login attempts. Try again in a minute.")
+
+    # Account-level lockout check
+    if not _check_rate_limit(f"login_account:{body.email}", _MAX_LOGIN_ATTEMPTS, _LOCKOUT_SECONDS):
+        raise HTTPException(status_code=429, detail="Account temporarily locked due to too many failed attempts.")
+
     user = db.query(User).filter(User.email == body.email).first()
 
     if not user or not verify_password(body.password, user.password_hash):
+        # Still count toward account lockout on failure
+        _check_rate_limit(f"login_account:{body.email}", _MAX_LOGIN_ATTEMPTS, _LOCKOUT_SECONDS)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     access_token = create_access_token({"sub": user.id})

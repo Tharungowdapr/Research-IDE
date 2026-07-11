@@ -174,19 +174,19 @@ export const LiteratureReview: React.FC<LiteratureReviewProps> = ({ projectId })
             {review && (
                 <div className="space-y-6">
                     {review.introduction && (
-                        <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{review.introduction}</p>
+                        <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{String(review.introduction)}</p>
                     )}
 
                     {review.themes && review.themes.length > 0 && (
                         <section>
                             <h4 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider mb-3">Research Themes</h4>
                             <div className="space-y-2">
-                                {review.themes.map((theme, i) => (
+                                {review.themes.map((theme: any, i: number) => (
                                     <div key={i} className="rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] p-3">
-                                        <p className="text-xs font-semibold text-[var(--text-primary)] mb-1">{theme.name}</p>
-                                        <p className="text-xs text-[var(--text-secondary)]">{theme.description}</p>
+                                        <p className="text-xs font-semibold text-[var(--text-primary)] mb-1">{String(theme.name || '')}</p>
+                                        <p className="text-xs text-[var(--text-secondary)]">{String(theme.description || '')}</p>
                                         {theme.key_findings && (
-                                            <p className="text-xs text-brand-400 mt-1">Key findings: {theme.key_findings}</p>
+                                            <p className="text-xs text-brand-400 mt-1">Key findings: {String(theme.key_findings)}</p>
                                         )}
                                     </div>
                                 ))}
@@ -197,7 +197,7 @@ export const LiteratureReview: React.FC<LiteratureReviewProps> = ({ projectId })
                     {review.methodology_comparison && (
                         <section>
                             <h4 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider mb-3">Methodology Comparison</h4>
-                            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{review.methodology_comparison}</p>
+                            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{String(review.methodology_comparison)}</p>
                         </section>
                     )}
 
@@ -205,12 +205,17 @@ export const LiteratureReview: React.FC<LiteratureReviewProps> = ({ projectId })
                         <section>
                             <h4 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider mb-3">Research Gaps</h4>
                             <ul className="space-y-1">
-                                {review.gaps_identified.map((gap, i) => (
+                                {review.gaps_identified.map((gap: any, i: number) => {
+                                    const text = typeof gap === 'string' ? gap
+                                        : typeof gap === 'object' ? (gap?.gap || JSON.stringify(gap))
+                                        : String(gap);
+                                    return (
                                     <li key={i} className="flex items-start gap-2 text-xs text-[var(--text-secondary)]">
                                         <span className="text-yellow-400 flex-shrink-0">•</span>
-                                        <span>{gap}</span>
+                                        <span>{text}</span>
                                     </li>
-                                ))}
+                                    );
+                                })}
                             </ul>
                         </section>
                     )}
@@ -219,12 +224,17 @@ export const LiteratureReview: React.FC<LiteratureReviewProps> = ({ projectId })
                         <section>
                             <h4 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider mb-3">Future Directions</h4>
                             <ul className="space-y-1">
-                                {review.future_directions.map((dir, i) => (
+                                {review.future_directions.map((dir: any, i: number) => {
+                                    const text = typeof dir === 'string' ? dir
+                                        : typeof dir === 'object' ? (dir?.direction || JSON.stringify(dir))
+                                        : String(dir);
+                                    return (
                                     <li key={i} className="flex items-start gap-2 text-xs text-[var(--text-secondary)]">
                                         <span className="text-green-400 flex-shrink-0">→</span>
-                                        <span>{dir}</span>
+                                        <span>{text}</span>
                                     </li>
-                                ))}
+                                    );
+                                })}
                             </ul>
                         </section>
                     )}
@@ -232,7 +242,7 @@ export const LiteratureReview: React.FC<LiteratureReviewProps> = ({ projectId })
                     {review.conclusion && (
                         <section>
                             <h4 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider mb-3">Conclusion</h4>
-                            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{review.conclusion}</p>
+                            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{String(review.conclusion)}</p>
                         </section>
                     )}
 
@@ -242,10 +252,10 @@ export const LiteratureReview: React.FC<LiteratureReviewProps> = ({ projectId })
                             <div className="space-y-2">
                                 {bibliography.map((entry: any, i) => (
                                     <div key={i} className="rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] p-3">
-                                        <p className="text-xs font-medium text-[var(--text-primary)] mb-1">{entry.citation}</p>
-                                        <p className="text-xs text-[var(--text-secondary)]">{entry.summary}</p>
+                                        <p className="text-xs font-medium text-[var(--text-primary)] mb-1">{String(entry.citation || '')}</p>
+                                        <p className="text-xs text-[var(--text-secondary)]">{String(entry.summary || '')}</p>
                                         {entry.relevance && (
-                                            <p className="text-xs text-brand-400 mt-1">Relevance: {entry.relevance}</p>
+                                            <p className="text-xs text-brand-400 mt-1">Relevance: {String(entry.relevance)}</p>
                                         )}
                                     </div>
                                 ))}

@@ -236,6 +236,12 @@ export const agentsAPI = {
 
   generateReport: (projectId: string) =>
     api.post('/agents/generate-report', { project_id: projectId }).then((r) => r.data),
+
+  uploadResults: (projectId: string, metrics: Record<string, any>) =>
+    api.post('/agents/upload-results', { project_id: projectId, metrics }).then((r) => r.data),
+
+  saveReport: (projectId: string, report: Record<string, any>) =>
+    api.post('/agents/save-report', { project_id: projectId, report }).then((r) => r.data),
 };
 
 // ── LLM Config ───────────────────────────────────────────────────────────────
@@ -316,7 +322,7 @@ export const systemAPI = {
       onmessage(ev) {
         try { onData(JSON.parse(ev.data)); } catch {}
       },
-      onerror(err) { onError?.(err); throw err; },
+      onerror(err) { if (err?.name === 'AbortError') return; onError?.(err); throw err; },
     });
     return () => ctrl.abort();
   },

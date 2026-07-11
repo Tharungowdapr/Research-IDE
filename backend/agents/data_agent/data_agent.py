@@ -76,5 +76,17 @@ async def run_data_plan_generation(
         result = parse_json(raw)
         if isinstance(result, dict) and ("suggested_datasets" in result or "preprocessing" in result):
             return result
+        return {
+            "suggested_datasets": [],
+            "data_collection": [],
+            "preprocessing": [],
+            "augmentation": [],
+            "data_pipeline_tools": [],
+            "data_validation": [],
+            "ethical_considerations": [],
+            "storage_recommendation": "Standard local storage recommended",
+            "detailed_explanation": "The LLM response did not match the expected format. Please retry this step.",
+            "_warning": "Fallback data plan generated due to LLM format mismatch",
+        }
     except Exception as e:
         raise ValueError(f"Data generation failed: {e}") from e

@@ -6,14 +6,16 @@ import io
 import json as json_lib
 import re
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
 
 from core.database import get_db
-from core.security import get_current_user
+from core.security import get_current_user, verify_token
+from core.security import security as _security_scheme
 from core.llm_client import build_llm_client_for_user
 from models.user import User
 from models.project import Project, Output
@@ -166,6 +168,10 @@ async def generate_data_plan(
     project = _get_project(body.project_id, current_user.id, db)
     selected = _get_output(db, project.id, "selected_idea")
     plan = _get_output(db, project.id, "plan")
+    gaps = _get_output(db, project.id, "gaps") or {}
+    papers = _get_output(db, project.id, "papers") or {}
+    objectives = _get_output(db, project.id, "objectives") or {}
+    intent = _get_output(db, project.id, "intent") or {}
     if not selected:
         raise HTTPException(status_code=400, detail="Select an idea first")
 
@@ -173,6 +179,10 @@ async def generate_data_plan(
     try:
         data_plan = await run_data_plan_generation(
             selected.get("idea", {}), plan or {}, llm,
+            gaps=gaps.get("gaps", []) if isinstance(gaps, dict) else gaps,
+            papers=papers.get("papers", []) if isinstance(papers, dict) else papers,
+            objectives=objectives.get("objectives", []) if isinstance(objectives, dict) else objectives,
+            intent=intent,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Data plan failed: {str(e)}")
@@ -404,7 +414,7 @@ async def generate_code_stream(
             full_content = ""
             try:
                 async for chunk in run_code_generation_stream(
-                    project_id, intent or "", papers_list, current_user.id, llm,
+                    project.id, intent or "", papers_list, current_user.id, llm,
                     idea=idea_data, plan=plan or {},
                     project_structure=file_hints if isinstance(file_hints, list) else None,
                 ):
@@ -414,7 +424,7 @@ async def generate_code_stream(
                 logging.warning(f"Code streaming failed, falling back to non-streaming: {stream_err}")
                 try:
                     code = await run_code_generation(
-                        project_id, intent or "", papers_list, current_user.id, llm,
+                        project.id, intent or "", papers_list, current_user.id, llm,
                         idea=idea_data, plan=plan or {},
                         project_structure=file_hints if isinstance(file_hints, list) else None,
                     )
@@ -532,6 +542,27 @@ def _get_output(db: Session, project_id: str, output_type: str):
     return o.data if o else None
 
 
+def _get_user_for_download(
+    token: Optional[str] = Query(None, alias="token"),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_security_scheme),
+    db: Session = Depends(get_db),
+) -> User:
+    """Resolve user from Bearer header OR ?token= query param (for direct <a> downloads)."""
+    user_id = None
+    if credentials and credentials.credentials:
+        user_id = verify_token(credentials.credentials)
+    if not user_id and token:
+        user_id = verify_token(token)
+
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
 # ── Literature Review ────────────────────────────────────────────
 
 @router.post("/{project_id}/literature-review")
@@ -615,7 +646,7 @@ async def get_citation_graph(
 @router.get("/{project_id}/download/docx")
 async def download_docx(
     project_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_get_user_for_download),
     db: Session = Depends(get_db),
 ):
     """Generate and download IEEE-format DOCX."""
@@ -637,7 +668,7 @@ async def download_docx(
 @router.get("/{project_id}/download/pdf")
 async def download_pdf(
     project_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_get_user_for_download),
     db: Session = Depends(get_db),
 ):
     """Generate and download IEEE-format PDF."""
@@ -646,29 +677,17 @@ async def download_pdf(
     if not report:
         raise HTTPException(status_code=400, detail="Generate the report first")
 
-    from services.export_service import generate_pdf_html
-
-    html_content = generate_pdf_html(report)
-
-    # Try WeasyPrint first, fallback to HTML download
+    from services.export_service import generate_pdf
     try:
-        from weasyprint import HTML
-        pdf_bytes = HTML(string=html_content).write_pdf()
-        return StreamingResponse(
-            io.BytesIO(pdf_bytes),
-            media_type="application/pdf",
-            headers={"Content-Disposition": "attachment; filename=research_paper.pdf"},
-        )
-    except ImportError:
-        # WeasyPrint not installed — return HTML as PDF-like download
-        html_bytes = html_content.encode("utf-8")
-        return StreamingResponse(
-            io.BytesIO(html_bytes),
-            media_type="text/html",
-            headers={"Content-Disposition": "attachment; filename=research_paper.html"},
-        )
+        pdf_bytes = generate_pdf(report)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=research_paper.pdf"},
+    )
 
 
 # ── Guide Generation ──────────────────────────────────────────────────────────
@@ -857,3 +876,44 @@ async def download_pptx(
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
         headers={"Content-Disposition": "attachment; filename=presentation.pptx"},
     )
+
+
+# ── Results Upload ───────────────────────────────────────────────────────────
+
+class ResultsUploadRequest(BaseModel):
+    project_id: str
+    metrics: dict  # {"accuracy": 0.95, "f1": 0.93, "inference_time_ms": 42, ...}
+
+
+@router.post("/upload-results")
+async def upload_results(
+    body: ResultsUploadRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Upload experimental results metrics for a project."""
+    _get_project(body.project_id, current_user.id, db)
+    existing = _get_output(db, body.project_id, "user_results")
+    if existing:
+        merged = {**existing, **body.metrics}
+        _save_output(db, body.project_id, "user_results", merged)
+    else:
+        _save_output(db, body.project_id, "user_results", body.metrics)
+    return {"status": "ok", "metrics": body.metrics}
+
+
+class SaveReportRequest(BaseModel):
+    project_id: str
+    report: dict
+
+
+@router.post("/save-report")
+async def save_report(
+    body: SaveReportRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Save edited report data back to the report output."""
+    _get_project(body.project_id, current_user.id, db)
+    _save_output(db, body.project_id, "report", body.report)
+    return {"status": "ok"}

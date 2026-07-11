@@ -63,12 +63,18 @@ async def _fetch_html_text(url: str) -> Optional[str]:
             resp = await client.get(url)
             if resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, "html.parser")
-                # Remove only scripts and styles - PRESERVE math, figures, tables for research content
-                for el in soup(["script", "style"]):
+                # Remove non-content elements
+                for el in soup(["script", "style", "nav", "header", "footer", "aside"]):
                     el.extract()
-                
-                # Extract text while preserving structure
-                text = soup.get_text(separator="\n", strip=True)
+                # Remove ar5iv-specific noise
+                for el in soup.select(".ltx_note, .ltx_equation, .ltx_title_bibliography"):
+                    el.extract()
+                # Extract only prose elements
+                prose_elements = soup.find_all(["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "td", "th"])
+                if prose_elements:
+                    text = "\n".join(el.get_text(strip=True) for el in prose_elements if el.get_text(strip=True))
+                else:
+                    text = soup.get_text(separator="\n", strip=True)
                 return text
     except Exception as e:
         print(f"[HTML Extract Error] {url}: {e}")

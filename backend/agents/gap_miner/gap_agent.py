@@ -132,6 +132,19 @@ async def run_gap_analysis(
             return _extracted_gaps_from_papers(enriched_papers)
         gaps = gaps[:15]
 
+        # Normalize supporting_papers early
+        for g in gaps:
+            papers_list = g.get("supporting_papers", [])
+            normalized = []
+            for p in papers_list:
+                if isinstance(p, dict):
+                    normalized.append(p.get("title", p.get("paper_title", str(p)[:120])))
+                elif isinstance(p, str):
+                    normalized.append(p)
+                else:
+                    normalized.append(str(p))
+            g["supporting_papers"] = normalized
+
         # Pass 3: Score gaps (skip for Ollama)
         skip_pass3 = llm.provider.value == "ollama"
         if not skip_pass3:
@@ -142,8 +155,8 @@ async def run_gap_analysis(
 
         if skip_pass3:
             for g in gaps:
-                g.setdefault("addressability", 7)
-                g.setdefault("impact", 7)
+                g.setdefault("addressability", _estimate_addressability(g))
+                g.setdefault("impact", _estimate_impact(g))
 
         # Compute final score
         for g in gaps:
@@ -153,12 +166,38 @@ async def run_gap_analysis(
             g["final_score"] = round(addr * 0.4 + imp * 0.4 + nov * 0.2, 2)
 
         gaps.sort(key=lambda g: g.get("final_score", 0), reverse=True)
+
+        # Normalize supporting_papers to always be list of strings
+        for g in gaps:
+            papers_list = g.get("supporting_papers", [])
+            normalized = []
+            for p in papers_list:
+                if isinstance(p, dict):
+                    normalized.append(p.get("title", p.get("paper_title", str(p)[:120])))
+                elif isinstance(p, str):
+                    normalized.append(p)
+                else:
+                    normalized.append(str(p))
+            g["supporting_papers"] = normalized
+
         return gaps
 
     except Exception as e:
         print(f"Gap analysis pipeline error: {e}")
         # Return fallback gaps using enriched papers if available
-        return _extracted_gaps_from_papers(enriched_papers if 'enriched_papers' in locals() else papers)
+        gaps = _extracted_gaps_from_papers(enriched_papers if 'enriched_papers' in locals() else papers)
+        for g in gaps:
+            papers_list = g.get("supporting_papers", [])
+            normalized = []
+            for p in papers_list:
+                if isinstance(p, dict):
+                    normalized.append(p.get("title", p.get("paper_title", str(p)[:120])))
+                elif isinstance(p, str):
+                    normalized.append(p)
+                else:
+                    normalized.append(str(p))
+            g["supporting_papers"] = normalized
+        return gaps
 
 
 async def _pass1_extract_claims(papers_summary: str, llm: LLMClient) -> List[Dict]:
@@ -275,7 +314,7 @@ def _extract_key_sections(text: str) -> str:
         (r"conclusion[:\s]*", "Conclusion"),
         (r"limitation[:\s]*", "Limitations"),
         (r"future work[:\s]*", "Future Work"),
-        (r"disussion[:\s]*", "Discussion"),
+        (r"discussion[:\s]*", "Discussion"),
     ]
     
     for pattern, name in patterns:
@@ -387,9 +426,40 @@ def _extracted_gaps_from_papers(papers: List[Dict]) -> List[Dict]:
                         "from_full_text": has_full_text,
                     })
                 idx += len(kw)
-        # Limit per paper to avoid too many near-duplicates
-        gaps = gaps[:3 * len(papers[:10])]
-    return gaps[:15] if gaps else _default_gaps()
+    gaps = gaps[:15]
+    return gaps if gaps else _default_gaps()
+
+
+def _estimate_addressability(gap: dict) -> int:
+    """Rule-based estimate: how addressable is this gap for a single researcher in 6 months."""
+    evidence = gap.get("evidence_strength", "moderate")
+    category = gap.get("gap_category", "")
+    score = 6
+    if evidence == "strong":
+        score += 1
+    elif evidence == "weak":
+        score -= 1
+    if category in ("unexplored_combination", "evaluation_gap"):
+        score += 1
+    elif category in ("scalability_gap", "theoretical_gap"):
+        score -= 1
+    return max(3, min(score, 9))
+
+
+def _estimate_impact(gap: dict) -> int:
+    """Rule-based estimate: potential impact if this gap is addressed."""
+    category = gap.get("gap_category", "")
+    novelty = gap.get("novelty_potential", 5)
+    score = 5
+    if category in ("unexplored_combination", "theoretical_gap"):
+        score += 2
+    elif category in ("dataset_gap", "evaluation_gap"):
+        score += 1
+    if novelty >= 8:
+        score += 1
+    elif novelty <= 3:
+        score -= 1
+    return max(3, min(score, 9))
 
 
 def _default_gaps() -> List[Dict]:

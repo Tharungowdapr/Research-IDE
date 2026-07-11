@@ -122,49 +122,156 @@ plugin = SamplePlugin()
         print(f"Sample plugin created at {sample_path}")
 
 
-def call_external_tool(tool_name: str, params: Dict) -> Dict:
+async def call_external_tool(tool_name: str, params: Dict) -> Dict:
     """Call an external research tool/API."""
-    # Example integrations
     tool_map = {
         "crossref": _call_crossref,
         "pubmed": _call_pubmed,
         "google_scholar": _call_google_scholar,
     }
-    
+
     if tool_name in tool_map:
-        return tool_map[tool_name](params)
-    
+        return await tool_map[tool_name](params)
+
     return {"error": f"Tool {tool_name} not supported"}
 
 
 async def _call_crossref(params: Dict) -> Dict:
     """Query Crossref API for academic papers."""
     import httpx
-    
+
     try:
         query = params.get("query", "")
         url = "https://api.crossref.org/works"
-        resp = await httpx.AsyncClient().get(url, params={
-            "query": query,
-            "rows": params.get("limit", 10),
-            "mailto": "research@ide.app",
-        })
-        
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, params={
+                "query": query,
+                "rows": params.get("limit", 10),
+                "mailto": "research@ide.app",
+            })
+
         if resp.status_code == 200:
             data = resp.json()
-            return {"results": data.get("message", {}).get("items", [])}
+            items = data.get("message", {}).get("items", [])
+            results = []
+            for item in items:
+                results.append({
+                    "title": item.get("title", [""])[0] if item.get("title") else "",
+                    "authors": [
+                        f"{a.get('given', '')} {a.get('family', '')}".strip()
+                        for a in item.get("author", [])
+                    ],
+                    "year": str(item.get("published-print", {}).get("date-parts", [[""]])[0][0]) if item.get("published-print") else "",
+                    "doi": item.get("DOI", ""),
+                    "source": "crossref",
+                })
+            return {"results": results}
+        return {"error": f"Crossref returned status {resp.status_code}"}
     except Exception as e:
         return {"error": str(e)}
-    
-    return {"error": "Crossref API request failed"}
 
 
-def _call_pubmed(params: Dict) -> Dict:
-    """Query PubMed for biomedical papers."""
-    # Simplified - would use Biopython's Entrez in production
-    return {"error": "PubMed integration not yet implemented"}
+async def _call_pubmed(params: Dict) -> Dict:
+    """Query PubMed via NCBI E-utilities for biomedical papers."""
+    import httpx
+
+    try:
+        query = params.get("query", "")
+        limit = params.get("limit", 10)
+        base = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            search_resp = await client.get(f"{base}/esearch.fcgi", params={
+                "db": "pubmed",
+                "term": query,
+                "retmax": limit,
+                "retmode": "json",
+            })
+            search_data = search_resp.json()
+            ids = search_data.get("esearchresult", {}).get("idlist", [])
+            if not ids:
+                return {"results": []}
+
+            fetch_resp = await client.get(f"{base}/esummary.fcgi", params={
+                "db": "pubmed",
+                "id": ",".join(ids),
+                "retmode": "json",
+            })
+            fetch_data = fetch_resp.json()
+            results = []
+            for pid in ids:
+                info = fetch_data.get("result", {}).get(pid, {})
+                if not info or info.get("error"):
+                    continue
+                authors = [
+                    a.get("name", "") for a in info.get("authors", [])
+                ]
+                results.append({
+                    "title": info.get("title", ""),
+                    "authors": authors,
+                    "year": info.get("pubdate", "")[:4],
+                    "pmid": pid,
+                    "source": "pubmed",
+                    "abstract_snippet": info.get("sortpubdate", ""),
+                })
+            return {"results": results}
+    except Exception as e:
+        return {"error": str(e)}
 
 
-def _call_google_scholar(params: Dict) -> Dict:
-    """Query Google Scholar (via proxy/scraper)."""
-    return {"error": "Google Scholar integration not yet implemented"}
+async def _call_google_scholar(params: Dict) -> Dict:
+    """Query Google Scholar using SerpAPI (if key available) or Semantic Scholar as fallback."""
+    import httpx
+
+    serpapi_key = os.environ.get("SERPAPI_API_KEY", "")
+    if serpapi_key:
+        try:
+            query = params.get("query", "")
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.get("https://serpapi.com/search", params={
+                    "q": query,
+                    "api_key": serpapi_key,
+                    "engine": "google_scholar",
+                    "num": params.get("limit", 10),
+                })
+            if resp.status_code == 200:
+                data = resp.json()
+                results = []
+                for item in data.get("organic_results", []):
+                    results.append({
+                        "title": item.get("title", ""),
+                        "authors": [a.get("name", "") for a in item.get("inline_links", {}).get("authors", [])] if isinstance(item.get("inline_links", {}).get("authors"), list) else [],
+                        "year": str(item.get("publication_info", {}).get("summary", "")[-4:]) if item.get("publication_info") else "",
+                        "url": item.get("link", ""),
+                        "source": "google_scholar",
+                        "snippet": item.get("snippet", ""),
+                    })
+                return {"results": results}
+        except Exception as e:
+            pass
+
+    try:
+        query = params.get("query", "")
+        limit = params.get("limit", 10)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get("https://api.semanticscholar.org/graph/v1/paper/search", params={
+                "query": query,
+                "limit": limit,
+                "fields": "title,authors,year,url,abstract",
+            })
+        if resp.status_code == 200:
+            data = resp.json()
+            results = []
+            for p in data.get("data", []):
+                results.append({
+                    "title": p.get("title", ""),
+                    "authors": [a.get("name", "") for a in p.get("authors", [])],
+                    "year": str(p.get("year", "")),
+                    "url": p.get("url", ""),
+                    "source": "semantic_scholar",
+                    "abstract_snippet": (p.get("abstract") or "")[:200],
+                })
+            return {"results": results}
+        return {"error": f"Semantic Scholar returned status {resp.status_code}"}
+    except Exception as e:
+        return {"error": str(e)}

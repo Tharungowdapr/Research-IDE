@@ -23,7 +23,7 @@ async def retrieve_papers(
     all_papers = []
 
     tasks = []
-    for query in queries[:2]:
+    for query in queries[:5]:
         tasks.append(_fetch_arxiv(query, max_results=10))
         tasks.append(_fetch_semantic_scholar(query, max_results=10))
         tasks.append(_fetch_openalex(query, max_results=10))
@@ -143,12 +143,16 @@ def _recency_score(year: str) -> float:
     try:
         y = int(year)
         current = datetime.now().year
-        if y >= current - 1:
+        if y >= current:
             return 1.0
         elif y >= current - 2:
-            return 0.7
-        else:
+            return 0.8
+        elif y >= current - 3:
+            return 0.6
+        elif y >= current - 5:
             return 0.4
+        else:
+            return 0.2
     except (ValueError, TypeError):
         return 0.3
 
@@ -156,7 +160,7 @@ def _recency_score(year: str) -> float:
 def _citation_weight(citations: str) -> float:
     try:
         c = int(str(citations).replace("N/A", "0").replace(",", ""))
-        return min(c / 500, 1.0)
+        return min(c / 200, 1.0)
     except (ValueError, TypeError):
         return 0.0
 
@@ -213,6 +217,7 @@ async def _fetch_arxiv(query: str, max_results: int = 10) -> List[Dict]:
 
 async def _fetch_semantic_scholar(query: str, max_results: int = 10) -> List[Dict]:
     try:
+        import os
         url = "https://api.semanticscholar.org/graph/v1/paper/search"
         params = {
             "query": query,
@@ -220,6 +225,9 @@ async def _fetch_semantic_scholar(query: str, max_results: int = 10) -> List[Dic
             "fields": "title,abstract,year,citationCount,authors,externalIds,url",
         }
         headers = {"User-Agent": "ResearchIDE/1.0"}
+        s2_key = os.environ.get("S2_API_KEY", "")
+        if s2_key:
+            headers["x-api-key"] = s2_key
         async with httpx.AsyncClient(timeout=12.0) as client:
             resp = await client.get(url, params=params, headers=headers)
             if resp.status_code == 429:

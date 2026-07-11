@@ -12,7 +12,7 @@ const MAX_HISTORY = 60;
 type Snap = {
   ts: number;
   cpu: { percent: number; count_logical: number; count_physical: number; freq_mhz: number | null; freq_max_mhz: number | null };
-  ram: { total_gb: number; used_gb: number; available_gb: number; percent: number; swap_used_gb: number; swap_percent: number };
+  ram: { total_gb: number; used_gb: number; available_gb: number; percent: number; swap_used_gb: number; swap_percent: number; swap_total_gb?: number };
   disk: { total_gb: number; used_gb: number; free_gb: number; percent: number };
   network: { bytes_sent_mb: number; bytes_recv_mb: number };
   battery: { percent: number; plugged: boolean; secs_left: number | null } | null;

@@ -72,6 +72,14 @@ app.include_router(system.router, prefix="/api/system", tags=["System Monitor"])
 async def health_check():
     return {"status": "ok", "version": "1.0.0"}
 
+@app.get("/api/debug/cors", tags=["Debug"])
+async def debug_cors():
+    import os
+    return {
+        "allowed_origins": settings.ALLOWED_ORIGINS,
+        "env_origins": os.environ.get("ALLOWED_ORIGINS", "NOT SET"),
+    }
+
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",

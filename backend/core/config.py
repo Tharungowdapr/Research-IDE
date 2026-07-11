@@ -6,10 +6,23 @@ All settings loaded from environment variables with defaults.
 from pydantic_settings import BaseSettings
 from typing import List
 import os
+import json
 
 
 _DEFAULT_SECRET = "change-this-in-production-use-a-long-random-string"
 _DEFAULT_ENCRYPTION = "change-this-32-char-encryption-key!"
+
+
+def _parse_cors(origins_val) -> List[str]:
+    if isinstance(origins_val, list):
+        return origins_val
+    s = str(origins_val).strip()
+    if s.startswith("["):
+        try:
+            return json.loads(s)
+        except json.JSONDecodeError:
+            pass
+    return [o.strip().strip('"').strip("'") for o in s.split(",") if o.strip()]
 
 
 class Settings(BaseSettings):
@@ -35,8 +48,6 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "https://research-ide-frontend-6vx3cdjepa-el.a.run.app",
-        "https://gen-lang-client-0492292104.run.app",
     ]
 
     # ── LLM Provider Keys (users set these per-account, stored encrypted) ──
@@ -74,3 +85,8 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Parse ALLOWED_ORIGINS from env var if pydantic didn't handle it
+_env_origins = os.environ.get("ALLOWED_ORIGINS", "")
+if _env_origins and len(settings.ALLOWED_ORIGINS) <= 2:
+    settings.ALLOWED_ORIGINS = _parse_cors(_env_origins)

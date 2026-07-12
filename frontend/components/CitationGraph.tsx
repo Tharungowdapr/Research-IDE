@@ -37,6 +37,14 @@ export default function CitationGraph({ projectId }: CitationGraphProps) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<CitationGraphData | null>(null);
   const [error, setError] = useState('');
+  const [token, setToken] = useState('');
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('research-ide-auth');
+      if (stored) setToken(JSON.parse(stored)?.state?.accessToken || '');
+    } catch {}
+  }, []);
 
   useEffect(() => {
     const fetchGraph = async () => {
@@ -44,7 +52,7 @@ export default function CitationGraph({ projectId }: CitationGraphProps) {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
         const res = await fetch(`${apiUrl}/api/agents/${projectId}/citation-graph`, {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('research-ide-auth') ? JSON.parse(localStorage.getItem('research-ide-auth')!).state?.accessToken || '' : ''}`,
+            'Authorization': `Bearer ${token}`,
           },
         });
         
@@ -61,7 +69,7 @@ export default function CitationGraph({ projectId }: CitationGraphProps) {
     };
 
     fetchGraph();
-  }, [projectId]);
+  }, [projectId, token]);
 
   const drawGraph = (graphData: CitationGraphData) => {
     const canvas = canvasRef.current;

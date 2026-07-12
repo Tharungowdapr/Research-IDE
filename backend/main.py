@@ -3,9 +3,11 @@ ResearchIDE Backend - Main FastAPI Application
 Handles: Auth, Projects, NLP Pipeline, Agent Orchestration
 """
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+import asyncio
 import uvicorn
 import time
 import logging
@@ -18,6 +20,30 @@ import models.project  # ensure UsageLog and all models are registered with Base
 
 logger = logging.getLogger(__name__)
 
+
+async def _prune_rate_limiter():
+    """Periodically remove expired entries from the in-memory rate limiter."""
+    while True:
+        await asyncio.sleep(600)
+        try:
+            from api.routes.auth import _login_attempts
+            import time as _time
+            now = _time.time()
+            expired = [k for k, (n, t) in _login_attempts.items() if now - t > 300]
+            for k in expired:
+                _login_attempts.pop(k, None)
+            if expired:
+                logger.info(f"Pruned {len(expired)} expired rate-limit entries")
+        except Exception:
+            pass
+
+
+@asynccontextmanager
+async def lifespan(app):
+    asyncio.create_task(_prune_rate_limiter())
+    yield
+
+
 # Create all database tables
 Base.metadata.create_all(bind=engine)
 
@@ -27,6 +53,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
+    lifespan=lifespan,
 )
 
 # CORS Middleware

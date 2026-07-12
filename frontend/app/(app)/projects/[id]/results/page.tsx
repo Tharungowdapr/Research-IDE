@@ -102,6 +102,9 @@ export default function ResultsPage() {
 
   if (loading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-brand-400" /></div>;
 
+  const metricsValid = metrics.every(m => m.key.trim() !== '');
+  const canSave = metricsValid && !saving;
+
   return (
     <div className="min-h-screen bg-background text-foreground p-8 max-w-5xl mx-auto">
       <div className="mb-6 flex items-center justify-between">
@@ -110,7 +113,7 @@ export default function ResultsPage() {
           <p className="text-xs text-[var(--text-muted)] mt-0.5">Step 10 of 13 — Enter metrics and plan analysis</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={handleSaveResults} disabled={saving}
+          <button onClick={handleSaveResults} disabled={!canSave}
             className="btn-secondary flex items-center gap-1.5">
             {saving ? <Loader2 size={14} className="animate-spin" /> :
               saved ? <CheckCircle2 size={14} className="text-green-400" /> :
@@ -134,25 +137,30 @@ export default function ResultsPage() {
         </p>
         <div className="space-y-2">
           {metrics.map((m, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="metric name"
-                value={m.key}
-                onChange={e => updateMetric(i, 'key', e.target.value)}
-                className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-brand-500"
-              />
-              <input
-                type="text"
-                placeholder="value"
-                value={m.value}
-                onChange={e => updateMetric(i, 'value', e.target.value)}
-                className="w-32 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-brand-500"
-              />
-              <button onClick={() => removeMetric(i)}
-                className="p-2 rounded-lg text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors">
-                <Trash2 size={13} />
-              </button>
+            <div key={i}>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="metric name"
+                  value={m.key}
+                  onChange={e => updateMetric(i, 'key', e.target.value)}
+                  className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-brand-500"
+                />
+                <input
+                  type="text"
+                  placeholder="value"
+                  value={m.value}
+                  onChange={e => updateMetric(i, 'value', e.target.value)}
+                  className="w-32 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-brand-500"
+                />
+                <button onClick={() => removeMetric(i)}
+                  className="p-2 rounded-lg text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+              {!m.key.trim() && (
+                <p className="text-[10px] text-red-400 mt-0.5 ml-1">Key is required</p>
+              )}
             </div>
           ))}
         </div>

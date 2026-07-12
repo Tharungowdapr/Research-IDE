@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BookOpen, RefreshCw, Download, Loader2, AlertCircle } from 'lucide-react';
 
 interface LiteratureReviewProps {
@@ -22,16 +22,14 @@ export const LiteratureReview: React.FC<LiteratureReviewProps> = ({ projectId })
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [bibliography, setBibliography] = useState<string[]>([]);
+    const [token, setToken] = useState('');
 
-    const token = typeof window !== 'undefined'
-        ? (() => {
-            try {
-                const stored = localStorage.getItem('research-ide-auth');
-                if (stored) return JSON.parse(stored)?.state?.accessToken || '';
-            } catch { }
-            return '';
-        })()
-        : '';
+    useEffect(() => {
+        try {
+            const stored = localStorage.getItem('research-ide-auth');
+            if (stored) setToken(JSON.parse(stored)?.state?.accessToken || '');
+        } catch {}
+    }, []);
 
     const generateReview = async () => {
         try {

@@ -9,7 +9,7 @@ from typing import Dict, List, Any, Optional
 from core.config import settings
 
 
-PLUGIN_DIR = os.path.join(os.path.dirname(__file__), '../plugins')
+PLUGIN_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "plugins")
 
 
 class PluginRegistry:

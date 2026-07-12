@@ -7,6 +7,7 @@ import {
   CheckCircle2, Clock, AlertCircle, Presentation,
 } from 'lucide-react';
 import { projectsAPI, agentsAPI } from '@/services/api';
+import { useAuthStore } from '@/store/useAuthStore';
 
 export default function GuidePage() {
   const { id } = useParams<{ id: string }>();
@@ -310,12 +311,27 @@ export default function GuidePage() {
                   </button>
                 )}
                 {slides && (
-                  <a href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/agents/${id}/download/pptx`}
-                     className="btn-secondary text-xs"
-                     target="_blank"
+                  <button onClick={async () => {
+                    const token = useAuthStore.getState().accessToken;
+                    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+                    try {
+                      const resp = await fetch(`${apiUrl}/api/agents/${id}/download/pptx`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                      });
+                      if (!resp.ok) throw new Error('Download failed');
+                      const blob = await resp.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url; a.download = 'research_guide.pptx';
+                      document.body.appendChild(a); a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                    } catch { setError('PPTX download failed'); }
+                  }}
+                    className="btn-secondary text-xs"
                   >
                     <Download size={12} /> Download PPTX
-                  </a>
+                  </button>
                 )}
               </div>
             </div>

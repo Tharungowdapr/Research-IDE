@@ -209,17 +209,30 @@ def generate_pdf(report: Dict) -> bytes:
     pdf.set_auto_page_break(auto=False)
     pdf.set_margins(MARGIN_L, MARGIN_TOP, MARGIN_R)
 
-    # Register Times New Roman TTF
-    font_dir = r"C:\Windows\Fonts"
-    fonts = {
-        "":   os.path.join(font_dir, "times.ttf"),
-        "B":  os.path.join(font_dir, "timesbd.ttf"),
-        "I":  os.path.join(font_dir, "timesi.ttf"),
-        "BI": os.path.join(font_dir, "timesbi.ttf"),
+    # Register Times New Roman TTF — cross-platform
+    tnr_font_name = "Times"  # fallback: fpdf2 built-in serif font
+    font_search_dirs = [
+        r"C:\Windows\Fonts",                          # Windows
+        os.path.expanduser("~/.fonts"),                # Linux user
+        "/usr/share/fonts/truetype/msttcorefonts",     # Linux mscorefonts
+        "/usr/share/fonts/TTF",                        # Linux generic
+        "/System/Library/Fonts",                        # macOS
+    ]
+    tnr_files = {
+        "":   "times.ttf",
+        "B":  "timesbd.ttf",
+        "I":  "timesi.ttf",
+        "BI": "timesbi.ttf",
     }
-    for style, path in fonts.items():
-        if os.path.exists(path):
-            pdf.add_font("TNR", style, path)
+    for font_dir in font_search_dirs:
+        if not os.path.isdir(font_dir):
+            continue
+        found = sum(1 for f in tnr_files.values() if os.path.exists(os.path.join(font_dir, f)))
+        if found >= 2:
+            tnr_font_name = "TNR"
+            for style, fname in tnr_files.items():
+                pdf.add_font("TNR", style, os.path.join(font_dir, fname))
+            break
 
     def _col_x(col: int) -> float:
         return MARGIN_L + col * (COL_W + COL_GAP)
@@ -232,7 +245,7 @@ def generate_pdf(report: Dict) -> bytes:
         pdf.add_page()
 
         # Title
-        pdf.set_font("TNR", "B", 24)
+        pdf.set_font(tnr_font_name, "B", 24)
         pdf.set_x(MARGIN_L)
         pdf.multi_cell(PAGE_W - MARGIN_L - MARGIN_R, 10, _sanitize_pdf(
             report.get("title", "Research Paper")), align="C")
@@ -251,7 +264,7 @@ def generate_pdf(report: Dict) -> bytes:
                 author_line += ",  "
             sup = sup_digits[i] if i < len(sup_digits) and len(authors) > 1 else ""
             author_line += f"{_sanitize_pdf(name)}{sup}"
-        pdf.set_font("TNR", "I", 11)
+        pdf.set_font(tnr_font_name, "I", 11)
         pdf.set_x(MARGIN_L)
         pdf.multi_cell(PAGE_W - MARGIN_L - MARGIN_R, 6, author_line, align="C")
         pdf.ln(2)
@@ -261,7 +274,7 @@ def generate_pdf(report: Dict) -> bytes:
             sup_digits = ["\u00b9", "\u00b2", "\u00b3", "\u2074", "\u2075", "\u2076", "\u2077", "\u2078", "\u2079"]
             for i, aff in enumerate(affiliations):
                 marker = sup_digits[i] if i < len(sup_digits) and len(affiliations) > 1 else ""
-                pdf.set_font("TNR", "", 9)
+                pdf.set_font(tnr_font_name, "", 9)
                 pdf.set_x(MARGIN_L)
                 pdf.multi_cell(PAGE_W - MARGIN_L - MARGIN_R, 4.5,
                                f"{marker}{_sanitize_pdf(aff)}", align="C")
@@ -270,18 +283,18 @@ def generate_pdf(report: Dict) -> bytes:
         # Emails
         if emails:
             email_str = ", ".join(_sanitize_pdf(e) for e in emails)
-            pdf.set_font("TNR", "I", 8)
+            pdf.set_font(tnr_font_name, "I", 8)
             pdf.set_x(MARGIN_L)
             pdf.cell(PAGE_W - MARGIN_L - MARGIN_R, 4, f"Corresponding author: {email_str}",
                      align="C", new_x="LMARGIN", new_y="NEXT")
             pdf.ln(3)
 
         # Abstract
-        pdf.set_font("TNR", "B", 9)
+        pdf.set_font(tnr_font_name, "B", 9)
         pdf.set_x(MARGIN_L)
         abs_label_w = pdf.get_string_width("Abstract - ") + 2
         pdf.cell(abs_label_w, 5, "Abstract - ", new_x="END", new_y="TOP")
-        pdf.set_font("TNR", "", 9)
+        pdf.set_font(tnr_font_name, "", 9)
         remaining_w = PAGE_W - MARGIN_L - MARGIN_R - abs_label_w
         pdf.multi_cell(remaining_w, 4.5, _sanitize_pdf(
             report.get("abstract", "")), align="J")
@@ -290,11 +303,11 @@ def generate_pdf(report: Dict) -> bytes:
         # Index Terms
         keywords = report.get("keywords", [])
         if keywords:
-            pdf.set_font("TNR", "B", 9)
+            pdf.set_font(tnr_font_name, "B", 9)
             pdf.set_x(MARGIN_L)
             kw_label_w = pdf.get_string_width("Index Terms - ") + 2
             pdf.cell(kw_label_w, 5, "Index Terms - ", new_x="END", new_y="TOP")
-            pdf.set_font("TNR", "I", 9)
+            pdf.set_font(tnr_font_name, "I", 9)
             remaining_w = PAGE_W - MARGIN_L - MARGIN_R - kw_label_w
             pdf.multi_cell(remaining_w, 5, _sanitize_pdf(", ".join(keywords)), align="L")
             pdf.ln(2)
@@ -335,7 +348,7 @@ def generate_pdf(report: Dict) -> bytes:
 
     def _word_wrap(text: str, font_style: str, font_size: float) -> list:
         """Manually word-wrap text into lines that fit within COL_W."""
-        pdf.set_font("TNR", font_style, font_size)
+        pdf.set_font(tnr_font_name, font_style, font_size)
         words = _sanitize_pdf(text).split()
         lines = []
         current = ""
@@ -356,7 +369,7 @@ def generate_pdf(report: Dict) -> bytes:
         """Write a single line in the current column."""
         if pdf.get_y() + line_h > _bottom():
             _switch_col()
-        pdf.set_font("TNR", font_style, font_size)
+        pdf.set_font(tnr_font_name, font_style, font_size)
         pdf.set_x(_col_x(active_col))
         safe = "L" if align == "J" else align
         pdf.cell(COL_W, line_h, line, align=safe, new_x="LMARGIN", new_y="NEXT")
@@ -447,7 +460,7 @@ def generate_pdf(report: Dict) -> bytes:
     for pg in range(1, pdf.pages_count + 1):
         pdf.page = pg
         pdf.set_y(-10)
-        pdf.set_font("TNR", "", 9)
+        pdf.set_font(tnr_font_name, "", 9)
         pdf.cell(0, 5, str(pg), align="C")
 
     buf = io.BytesIO()

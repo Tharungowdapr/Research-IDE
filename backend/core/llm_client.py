@@ -754,7 +754,9 @@ async def get_ollama_models(base_url: str = "http://localhost:11434") -> list:
 def build_llm_client_for_user(user, provider: Optional[str] = None, model: Optional[str] = None, max_tokens: Optional[int] = None) -> LLMClient:
     """
     Build an LLMClient using the user's stored preferences and API keys.
+    Falls back to environment variables when user has no key set.
     """
+    import os
     from core.security import decrypt_api_key
 
     selected_provider = provider or user.preferred_provider or "ollama"
@@ -764,6 +766,28 @@ def build_llm_client_for_user(user, provider: Optional[str] = None, model: Optio
     api_key = None
     if user.llm_api_keys and selected_provider in user.llm_api_keys:
         api_key = decrypt_api_key(user.llm_api_keys[selected_provider])
+
+    # If no user key, fall back to environment variable
+    if not api_key:
+        env_key_map = {
+            "groq": "GROQ_API_KEY",
+            "openai": "OPENAI_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+            "gemini": "GEMINI_API_KEY",
+            "cohere": "COHERE_API_KEY",
+        }
+        env_var = env_key_map.get(selected_provider)
+        if env_var:
+            api_key = os.environ.get(env_var, "")
+
+    # If still no key and provider is ollama (no API needed) but Ollama unreachable,
+    # auto-switch to groq if GROQ_API_KEY is available
+    if selected_provider == "ollama" and not api_key:
+        groq_key = os.environ.get("GROQ_API_KEY", "")
+        if groq_key:
+            selected_provider = "groq"
+            api_key = groq_key
+            selected_model = selected_model or "llama-3.1-8b-instant"
 
     return LLMClient(
         provider=selected_provider,

@@ -79,8 +79,8 @@ async def run_nlp_analysis(
     project = _get_project(body.project_id, current_user.id, db)
     text = body.text or project.input_text
 
-    llm = build_llm_client_for_user(current_user, max_tokens=1024)
-    analysis = await analyze_text(text, llm)
+    # NLP analysis is pure local analysis — no LLM needed
+    analysis = await analyze_text(text, None)
 
     _save_output(db, project.id, "analysis", analysis)
     project.current_stage = "papers"
@@ -150,7 +150,7 @@ async def run_full_pipeline(
             # ── 1: NLP Analysis ─────────────────────────────────────────────
             yield "data: " + json.dumps({"stage": "analysis", "status": "running", "message": "Running deep NLP analysis..."}) + "\n\n"
             try:
-                analysis = await analyze_text(text, llm)
+                analysis = await analyze_text(text, None)
                 _save_output(db, project.id, "analysis", analysis)
                 project.current_stage = "papers"
                 db.commit()

@@ -62,7 +62,10 @@ def test_classify_domain_general():
 
 
 def _load_spacy():
-    import spacy
+    try:
+        import spacy
+    except ImportError:
+        pytest.skip("spacy not installed")
     try:
         return spacy.load("en_core_web_sm")
     except OSError:

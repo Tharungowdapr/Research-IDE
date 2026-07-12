@@ -36,7 +36,6 @@ outputs/
 checkpoints/
 *.gguf
 *.bin
-.cloud/.env.cloud
 
 # Test artifacts
 *.pdf
